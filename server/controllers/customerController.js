@@ -11,7 +11,7 @@ export const getCustomers = async (req, res) => {
 export const getCustomerHistory = async (req, res) => {
   try {
     const history = await Payment.find({ customerId: req.params.id })
-      .populate( "name")
+      .populate("customerId", "name phone monthlyAmount") // ✅ correct
       .sort({ createdAt: -1 });
 
     res.json(history);
@@ -19,7 +19,6 @@ export const getCustomerHistory = async (req, res) => {
     res.status(500).json({ message: "Server Error" });
   }
 };
-
 // ADD customer
 export const addCustomer = async (req, res) => {
   const newCustomer = await Customer.create(req.body);
