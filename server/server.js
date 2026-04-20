@@ -15,7 +15,7 @@ const app = express();
 app.use(cors({
   origin: [
     "http://localhost:5173", 
-    "https://auto-flow-manager.vercel.app/" 
+    "https://auto-flow-manager.vercel.app" 
   ],
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
   credentials: true
