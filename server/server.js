@@ -4,19 +4,31 @@ import dotenv from "dotenv";
 import { connectDB } from "./config/db.js";
 import cusRouter from "./routes/customerRoute.js";
 
-
-
 dotenv.config();
-connectDB()
 
+// Connect DB
+connectDB();
 
 const app = express();
 
-app.use(cors());
+
+app.use(cors({
+  origin: [
+    "http://localhost:5173", 
+    "https://auto-flow-manager.vercel.app/" 
+  ],
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+  credentials: true
+}));
+
 app.use(express.json());
 
-app.use("/api/customers", cusRouter)
 
-app.listen(process.env.PORT, () => {
-    console.log(`Server running PORT ${process.env.PORT}`)
-})
+app.use("/api/customers", cusRouter);
+
+
+const PORT = process.env.PORT || 5000;
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
