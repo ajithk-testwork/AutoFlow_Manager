@@ -2,32 +2,27 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Users, IndianRupee, AlertCircle, Plus, X, Save, MessageCircle, CheckCircle2, Clock, Edit, Trash2, Search, History, CalendarDays } from 'lucide-react';
 
-const API_URL = 'http://localhost:5000/api/customers';
+const API_URL = 'https://autoflow-manager.onrender.com/api/customers';
 
 const Dashboard = () => {
-    // We now store the "merged" data (Customer + Current Month Payment) for the table
     const [dashboardData, setDashboardData] = useState([]);
-
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingId, setEditingId] = useState(null);
 
     const [historyModalOpen, setHistoryModalOpen] = useState(false);
     const [selectedCustomer, setSelectedCustomer] = useState(null);
-    const [customerHistory, setCustomerHistory] = useState([]); // State for fetched history
+    const [customerHistory, setCustomerHistory] = useState([]);
 
     const [searchTerm, setSearchTerm] = useState('');
 
-    // Form State
     const [formData, setFormData] = useState({
         name: '', phone: '', amount: '', gender: 'male'
     });
 
-    // Helper to get the exact backend month string
     const getCurrentMonthStr = () => {
         return new Date().toLocaleString("default", { month: "long", year: "numeric" });
     };
 
-    // --- 1. DATA FETCHING & MERGING ---
     useEffect(() => {
         fetchDashboardData();
     }, []);
@@ -35,8 +30,6 @@ const Dashboard = () => {
     const fetchDashboardData = async () => {
         try {
             const currentMonth = getCurrentMonthStr();
-
-            // Fetch both customers and this month's payments simultaneously
             const [customersRes, paymentsRes] = await Promise.all([
                 axios.get(API_URL),
                 axios.get(`${API_URL}/payments?month=${currentMonth}`)
@@ -45,16 +38,14 @@ const Dashboard = () => {
             const customers = customersRes.data;
             const currentPayments = paymentsRes.data;
 
-            // Merge them so the table has everything it needs
             const mergedData = customers.map(customer => {
-                // Find the payment record for this specific customer
                 const paymentRecord = currentPayments.find(p =>
                     (p.customerId?._id || p.customerId) === customer._id
                 );
 
                 return {
                     ...customer,
-                    paymentId: paymentRecord?._id || null, // Needed for toggling
+                    paymentId: paymentRecord?._id || null,
                     status: paymentRecord?.status || 'No Record',
                     paidDate: paymentRecord?.paidDate || null
                 };
@@ -66,13 +57,11 @@ const Dashboard = () => {
         }
     };
 
-    // --- FINANCIAL CALCULATIONS ---
     const totalCustomers = dashboardData.length;
     const expectedRevenue = dashboardData.reduce((sum, c) => sum + (c.monthlyAmount || 0), 0);
     const collectedRevenue = dashboardData.reduce((sum, c) => c.status === 'Paid' ? sum + (c.monthlyAmount || 0) : sum, 0);
     const pendingDues = dashboardData.reduce((sum, c) => (c.status === 'Pending' || c.status === 'No Record') ? sum + (c.monthlyAmount || 0) : sum, 0);
 
-    // --- FORM HANDLERS ---
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         setFormData({ ...formData, [name]: value });
@@ -100,7 +89,7 @@ const Dashboard = () => {
                 await axios.post(API_URL, payload);
             }
             resetForm();
-            fetchDashboardData(); // Refetch to get updated list and new payment records
+            fetchDashboardData();
         } catch (error) {
             console.error("Failed to save customer:", error);
         }
@@ -128,7 +117,6 @@ const Dashboard = () => {
         }
     };
 
-    // --- ACTIONS ---
     const startNewMonth = async () => {
         if (window.confirm(`Start billing cycle for ${getCurrentMonthStr()}?`)) {
             try {
@@ -144,7 +132,7 @@ const Dashboard = () => {
         if (!paymentId) return alert("No payment record found for this month.");
         try {
             await axios.patch(`${API_URL}/payment/${paymentId}/toggle`);
-            fetchDashboardData(); // Refetch to sync UI with DB
+            fetchDashboardData();
         } catch (error) {
             console.error("Failed to toggle payment:", error);
         }
@@ -154,7 +142,6 @@ const Dashboard = () => {
         setSelectedCustomer(customer);
         setHistoryModalOpen(true);
         try {
-            // Fetch history from the newly added backend route
             const res = await axios.get(`${API_URL}/${customer._id}/history`);
             setCustomerHistory(res.data);
         } catch (error) {
@@ -167,38 +154,77 @@ const Dashboard = () => {
         .reduce((sum, record) => sum + record.amount, 0);
 
 
-    // --- WHATSAPP LOGIC ---
-    const handleSendWhatsApp = (customer, type) => {
-        const { name, phone, monthlyAmount, gender } = customer;
-        const month = getCurrentMonthStr();
+    // 🔥 UPDATED: Now points to your backend to handle the deep link routing perfectly
+   const generatePaymentData = (customer) => {
+  return {
+    payLink: `https://autoflow-manager.onrender.com/api/customers/pay?amount=${customer.monthlyAmount}`,
+    confirmLink: `https://autoflow-manager.onrender.com/api/customers/confirm?customerId=${customer._id}`
+  };
+};
 
-        // Determine honorific
-        const honorific = gender === 'female' ? " Ma'am" : " Sir";
+   const handleSendWhatsApp = (customer, type) => {
+    const { name, phone, monthlyAmount, gender } = customer;
 
-        let message = "";
+    const month = new Date().toLocaleString("default", {
+        month: "long",
+        year: "numeric"
+    });
 
-        // Generate the correct message based on the button clicked
-        if (type === 'request') {
-            message = `Hello ${name}${honorific},\n\nThis is a reminder for your ${month} car cleaning fee of ₹${monthlyAmount}.\n\nPlease make the payment when possible.\n\nThank you! 🚗✨`;
-        } else if (type === 'reminder') {
-            message = `Hi ${name}${honorific},\n\nYour car cleaning payment of ₹${monthlyAmount} for ${month} is still pending.\n\nKindly clear the dues to continue our service.\n\nThanks!`;
-        } else if (type === 'thankyou') {
-            message = `Hi ${name}${honorific},\n\nPayment of ₹${monthlyAmount} for ${month} received!\n\nThank you for choosing us! 🚗💧`;
-        }
+    const honorific =
+        gender === "female" ? " Ma'am" :
+        gender === "male" ? " Sir" : "";
 
-        // Format the phone number for the WhatsApp API
-        // Removes any spaces or special characters
-        let cleanPhone = phone.toString().replace(/\D/g, '');
+    // ✅ NEW LINKS
+    const { payLink, confirmLink } = generatePaymentData(customer);
 
-        // Automatically append +91 for Indian numbers if not already present
-        if (cleanPhone.length === 10) {
-            cleanPhone = '91' + cleanPhone;
-        }
+    let message = "";
 
-        // Create the URL and open it in a new tab
-        const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
-        window.open(whatsappUrl, '_blank');
-    };
+    if (type === "request") {
+        message = `Hello ${name}${honorific},
+
+This is a reminder for your ${month} car cleaning fee of ₹${monthlyAmount}.
+
+👉 Click & Pay:
+${payLink}
+
+✅ After payment, confirm here:
+${confirmLink}
+
+UPI ID: quicklyajithda3@okicici
+
+Thank you! 🚗✨`;
+    } 
+    else if (type === "reminder") {
+        message = `Hi ${name}${honorific},
+
+Your payment of ₹${monthlyAmount} for ${month} is still pending.
+
+⚡ Pay Now:
+${payLink}
+
+✅ After payment, confirm here:
+${confirmLink}
+
+Please clear dues soon.
+
+Thanks!`;
+    } 
+    else if (type === "thankyou") {
+        message = `Hi ${name}${honorific},
+
+Payment of ₹${monthlyAmount} received!
+
+Thank you for choosing us! 🚗💧`;
+    }
+
+    let cleanPhone = phone.toString().replace(/\D/g, "");
+    if (cleanPhone.length === 10) {
+        cleanPhone = "91" + cleanPhone;
+    }
+
+    const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, "_blank");
+};
 
     const filteredCustomers = dashboardData.filter(c =>
         c.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -207,7 +233,6 @@ const Dashboard = () => {
     return (
         <div className="min-h-screen bg-slate-50 p-6 md:p-8 font-sans relative">
 
-            {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                 <div>
                     <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
@@ -225,7 +250,6 @@ const Dashboard = () => {
                 </div>
             </div>
 
-            {/* Financial Stats */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-center">
                     <div className="flex items-center gap-3 mb-2">
@@ -262,7 +286,6 @@ const Dashboard = () => {
                 </div>
             </div>
 
-            {/* Customer Table */}
             <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="px-6 py-5 border-b border-slate-100 flex flex-col md:flex-row md:justify-between md:items-center bg-slate-50/50 gap-4">
                     <h2 className="text-lg font-bold text-slate-900">Active Subscriptions</h2>
@@ -312,8 +335,6 @@ const Dashboard = () => {
                                             )}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap flex items-center justify-end gap-3">
-
-                                            {/* Verification Toggle - Requires paymentId from the joined data */}
                                             {c.paymentId && (
                                                 <button
                                                     onClick={() => togglePaymentStatus(c.paymentId)}
@@ -326,8 +347,6 @@ const Dashboard = () => {
                                                 </button>
                                             )}
 
-                                            {/* WhatsApp Logic */}
-                                            {/* WhatsApp Logic */}
                                             {c.status === 'Pending' || c.status === 'No Record' ? (
                                                 <>
                                                     <button onClick={() => handleSendWhatsApp(c, 'request')} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 rounded-lg text-sm font-semibold transition-all" title="Send Request">
@@ -343,7 +362,6 @@ const Dashboard = () => {
                                                 </button>
                                             )}
 
-                                            {/* Action Buttons */}
                                             <div className="flex items-center gap-1 ml-2 pl-3 border-l border-slate-200">
                                                 <button onClick={() => openHistory(c)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="View Payment History">
                                                     <History size={18} />
@@ -364,7 +382,6 @@ const Dashboard = () => {
                 )}
             </div>
 
-            {/* --- ADD/EDIT CUSTOMER MODAL --- */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-opacity">
                     <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
@@ -405,7 +422,6 @@ const Dashboard = () => {
                 </div>
             )}
 
-            {/* --- HISTORY MODAL --- */}
             {historyModalOpen && selectedCustomer && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-opacity">
                     <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col max-h-[80vh]">
