@@ -1,5 +1,6 @@
 import Customer from "../models/Customer.js";
 import Payment from "../models/Payment.js";
+import QRCode from "qrcode";
 
 // GET all customers
 export const getCustomers = async (req, res) => {
@@ -199,5 +200,33 @@ export const confirmPayment = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).send("Server Error");
+  }
+};
+
+
+export const generateQRCode = async (req, res) => {
+  try {
+    const { amount } = req.query;
+
+    const upiId = "quicklyajithda3@okicici";
+    const name = "AutoFlow";
+
+    const upiString = `upi://pay?pa=${upiId}&pn=${name}&am=${amount}&cu=INR`;
+
+    const qrImage = await QRCode.toDataURL(upiString);
+
+    res.send(`
+      <html>
+        <body style="display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;background:#f8fafc;">
+          <div style="text-align:center;">
+            <h2>Scan & Pay ₹${amount}</h2>
+            <img src="${qrImage}" />
+            <p>Use GPay / PhonePe</p>
+          </div>
+        </body>
+      </html>
+    `);
+  } catch (err) {
+    res.status(500).send("Error generating QR");
   }
 };
