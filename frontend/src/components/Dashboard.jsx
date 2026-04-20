@@ -2,15 +2,15 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Users, IndianRupee, AlertCircle, Plus, X, Save, MessageCircle, CheckCircle2, Clock, Edit, Trash2, Search, History, CalendarDays } from 'lucide-react';
 
-const API_URL = 'http://localhost:5000/api/customers';
+const API_URL = 'https://autoflow-manager.onrender.com/api/customers';
 
 const Dashboard = () => {
     // We now store the "merged" data (Customer + Current Month Payment) for the table
     const [dashboardData, setDashboardData] = useState([]);
-    
+
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingId, setEditingId] = useState(null);
-    
+
     const [historyModalOpen, setHistoryModalOpen] = useState(false);
     const [selectedCustomer, setSelectedCustomer] = useState(null);
     const [customerHistory, setCustomerHistory] = useState([]); // State for fetched history
@@ -35,7 +35,7 @@ const Dashboard = () => {
     const fetchDashboardData = async () => {
         try {
             const currentMonth = getCurrentMonthStr();
-            
+
             // Fetch both customers and this month's payments simultaneously
             const [customersRes, paymentsRes] = await Promise.all([
                 axios.get(API_URL),
@@ -48,7 +48,7 @@ const Dashboard = () => {
             // Merge them so the table has everything it needs
             const mergedData = customers.map(customer => {
                 // Find the payment record for this specific customer
-                const paymentRecord = currentPayments.find(p => 
+                const paymentRecord = currentPayments.find(p =>
                     (p.customerId?._id || p.customerId) === customer._id
                 );
 
@@ -130,10 +130,10 @@ const Dashboard = () => {
 
     // --- ACTIONS ---
     const startNewMonth = async () => {
-        if(window.confirm(`Start billing cycle for ${getCurrentMonthStr()}?`)) {
+        if (window.confirm(`Start billing cycle for ${getCurrentMonthStr()}?`)) {
             try {
                 await axios.post(`${API_URL}/start-month`);
-                fetchDashboardData(); 
+                fetchDashboardData();
             } catch (error) {
                 console.error("Failed to start new month:", error);
             }
@@ -167,24 +167,45 @@ const Dashboard = () => {
         .reduce((sum, record) => sum + record.amount, 0);
 
     // --- WHATSAPP LOGIC ---
-    const sendWhatsApp = (customer, type) => {
-        const phone = `91${customer.phone.replace(/\D/g,'')}`; 
-        let text = "";
-        let honorific = customer.gender === 'male' ? " sir" : customer.gender === 'female' ? " ma'am" : "";
-        const currentMonth = new Date().toLocaleString("default", { month: "long" });
+    const handleSendWhatsApp = (customer, type) => {
+        const { name, phone, monthlyAmount, gender } = customer;
+        const month = getCurrentMonthStr();
 
+        // Determine honorific
+        const honorific = gender === 'female' ? " Ma'am" : " Sir";
+
+        // Your UPI Details
+        const upiId = "quicklyajithda3@okicici"; 
+
+        let message = "";
+
+        // Generate the correct message based on the button clicked
         if (type === 'request') {
-            text = `Hello ${customer.name}${honorific},\n\nThis is a reminder for your ${currentMonth} car cleaning fee of ₹${customer.monthlyAmount}.\n\nPlease make the payment when possible.\n\nThank you! 🚗✨`;
+            message = `Hello ${name}${honorific},\n\nThis is a reminder for your ${month} car cleaning fee of ₹${monthlyAmount}.\n\nPlease make the payment to this UPI ID: ${upiId}\n\nThank you! 🚗✨`;
         } else if (type === 'reminder') {
-            text = `Hi ${customer.name}${honorific},\n\nYour car cleaning payment of ₹${customer.monthlyAmount} for ${currentMonth} is still pending.\n\nKindly clear the dues to continue our service.\n\nThanks!`;
+            message = `Hi ${name}${honorific},\n\nYour car cleaning payment of ₹${monthlyAmount} for ${month} is still pending.\n\nKindly clear the dues to this UPI ID: ${upiId}\n\nThanks!`;
         } else if (type === 'thankyou') {
-            text = `Hi ${customer.name}${honorific},\n\nPayment of ₹${customer.monthlyAmount} for ${currentMonth} received!\n\nThank you for choosing us! 🚗💧`;
+            message = `Hi ${name}${honorific},\n\nPayment of ₹${monthlyAmount} for ${month} received!\n\nThank you for choosing us! 🚗💧`;
         }
 
-        window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank');
+        // Format the phone number for the WhatsApp API
+        let cleanPhone = phone.toString().replace(/\D/g, '');
+
+        // Automatically append +91 for Indian numbers if not already present
+        if (cleanPhone.length === 10) {
+            cleanPhone = '91' + cleanPhone;
+        }
+
+        // Create the URL and open it in a new tab
+        const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+        window.open(whatsappUrl, '_blank');
     };
 
-    const filteredCustomers = dashboardData.filter(c => 
+
+
+
+
+    const filteredCustomers = dashboardData.filter(c =>
         c.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
@@ -228,7 +249,7 @@ const Dashboard = () => {
                 </div>
 
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-emerald-100 flex flex-col justify-center relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-4 opacity-10"><CheckCircle2 size={64} className="text-emerald-500"/></div>
+                    <div className="absolute top-0 right-0 p-4 opacity-10"><CheckCircle2 size={64} className="text-emerald-500" /></div>
                     <div className="flex items-center gap-3 mb-2 relative z-10">
                         <div className="bg-emerald-50 p-2 rounded-lg text-emerald-600"><CheckCircle2 size={20} /></div>
                         <h2 className="text-sm font-semibold text-emerald-700 uppercase tracking-wider">Collected</h2>
@@ -237,7 +258,7 @@ const Dashboard = () => {
                 </div>
 
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-rose-100 flex flex-col justify-center relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-4 opacity-10"><AlertCircle size={64} className="text-rose-500"/></div>
+                    <div className="absolute top-0 right-0 p-4 opacity-10"><AlertCircle size={64} className="text-rose-500" /></div>
                     <div className="flex items-center gap-3 mb-2 relative z-10">
                         <div className="bg-rose-50 p-2 rounded-lg text-rose-600"><Clock size={20} /></div>
                         <h2 className="text-sm font-semibold text-rose-700 uppercase tracking-wider">Pending</h2>
@@ -296,33 +317,33 @@ const Dashboard = () => {
                                             )}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap flex items-center justify-end gap-3">
-                                            
+
                                             {/* Verification Toggle - Requires paymentId from the joined data */}
                                             {c.paymentId && (
-                                                <button 
+                                                <button
                                                     onClick={() => togglePaymentStatus(c.paymentId)}
-                                                    className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all mr-2 ${
-                                                        c.status === 'Pending' 
-                                                        ? 'bg-slate-100 text-slate-600 hover:bg-emerald-100 hover:text-emerald-700' 
-                                                        : 'bg-slate-100 text-slate-600 hover:bg-rose-100 hover:text-rose-700'
-                                                    }`}
+                                                    className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all mr-2 ${c.status === 'Pending'
+                                                            ? 'bg-slate-100 text-slate-600 hover:bg-emerald-100 hover:text-emerald-700'
+                                                            : 'bg-slate-100 text-slate-600 hover:bg-rose-100 hover:text-rose-700'
+                                                        }`}
                                                 >
                                                     {c.status === 'Pending' ? 'Mark Paid' : 'Mark Pending'}
                                                 </button>
                                             )}
 
                                             {/* WhatsApp Logic */}
+                                            {/* WhatsApp Logic */}
                                             {c.status === 'Pending' || c.status === 'No Record' ? (
                                                 <>
-                                                    <button onClick={() => sendWhatsApp(c, 'request')} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 rounded-lg text-sm font-semibold transition-all" title="Send Request">
+                                                    <button onClick={() => handleSendWhatsApp(c, 'request')} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 rounded-lg text-sm font-semibold transition-all" title="Send Request">
                                                         <MessageCircle size={16} /> Msg
                                                     </button>
-                                                    <button onClick={() => sendWhatsApp(c, 'reminder')} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:text-rose-800 rounded-lg text-sm font-semibold transition-all" title="Send Reminder">
+                                                    <button onClick={() => handleSendWhatsApp(c, 'reminder')} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:text-rose-800 rounded-lg text-sm font-semibold transition-all" title="Send Reminder">
                                                         <AlertCircle size={16} /> Remind
                                                     </button>
                                                 </>
                                             ) : (
-                                                <button onClick={() => sendWhatsApp(c, 'thankyou')} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800 rounded-lg text-sm font-semibold transition-all" title="Send Thank You">
+                                                <button onClick={() => handleSendWhatsApp(c, 'thankyou')} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800 rounded-lg text-sm font-semibold transition-all" title="Send Thank You">
                                                     <MessageCircle size={16} /> Thanks
                                                 </button>
                                             )}
