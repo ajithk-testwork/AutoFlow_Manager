@@ -5,29 +5,22 @@ import { Users, IndianRupee, AlertCircle, Plus, X, Save, MessageCircle, CheckCir
 const API_URL = 'https://autoflow-manager.onrender.com/api/customers';
 
 const Dashboard = () => {
-    // We now store the "merged" data (Customer + Current Month Payment) for the table
     const [dashboardData, setDashboardData] = useState([]);
-
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingId, setEditingId] = useState(null);
-
     const [historyModalOpen, setHistoryModalOpen] = useState(false);
     const [selectedCustomer, setSelectedCustomer] = useState(null);
-    const [customerHistory, setCustomerHistory] = useState([]); // State for fetched history
-
+    const [customerHistory, setCustomerHistory] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
 
-    // Form State
     const [formData, setFormData] = useState({
         name: '', phone: '', amount: '', gender: 'male'
     });
 
-    // Helper to get the exact backend month string
     const getCurrentMonthStr = () => {
         return new Date().toLocaleString("default", { month: "long", year: "numeric" });
     };
 
-    // --- 1. DATA FETCHING & MERGING ---
     useEffect(() => {
         fetchDashboardData();
     }, []);
@@ -35,8 +28,6 @@ const Dashboard = () => {
     const fetchDashboardData = async () => {
         try {
             const currentMonth = getCurrentMonthStr();
-
-            // Fetch both customers and this month's payments simultaneously
             const [customersRes, paymentsRes] = await Promise.all([
                 axios.get(API_URL),
                 axios.get(`${API_URL}/payments?month=${currentMonth}`)
@@ -45,16 +36,14 @@ const Dashboard = () => {
             const customers = customersRes.data;
             const currentPayments = paymentsRes.data;
 
-            // Merge them so the table has everything it needs
             const mergedData = customers.map(customer => {
-                // Find the payment record for this specific customer
                 const paymentRecord = currentPayments.find(p =>
                     (p.customerId?._id || p.customerId) === customer._id
                 );
 
                 return {
                     ...customer,
-                    paymentId: paymentRecord?._id || null, // Needed for toggling
+                    paymentId: paymentRecord?._id || null,
                     status: paymentRecord?.status || 'No Record',
                     paidDate: paymentRecord?.paidDate || null
                 };
@@ -66,13 +55,11 @@ const Dashboard = () => {
         }
     };
 
-    // --- FINANCIAL CALCULATIONS ---
     const totalCustomers = dashboardData.length;
     const expectedRevenue = dashboardData.reduce((sum, c) => sum + (c.monthlyAmount || 0), 0);
     const collectedRevenue = dashboardData.reduce((sum, c) => c.status === 'Paid' ? sum + (c.monthlyAmount || 0) : sum, 0);
     const pendingDues = dashboardData.reduce((sum, c) => (c.status === 'Pending' || c.status === 'No Record') ? sum + (c.monthlyAmount || 0) : sum, 0);
 
-    // --- FORM HANDLERS ---
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         setFormData({ ...formData, [name]: value });
@@ -100,7 +87,7 @@ const Dashboard = () => {
                 await axios.post(API_URL, payload);
             }
             resetForm();
-            fetchDashboardData(); // Refetch to get updated list and new payment records
+            fetchDashboardData();
         } catch (error) {
             console.error("Failed to save customer:", error);
         }
@@ -128,7 +115,6 @@ const Dashboard = () => {
         }
     };
 
-    // --- ACTIONS ---
     const startNewMonth = async () => {
         if (window.confirm(`Start billing cycle for ${getCurrentMonthStr()}?`)) {
             try {
@@ -144,7 +130,7 @@ const Dashboard = () => {
         if (!paymentId) return alert("No payment record found for this month.");
         try {
             await axios.patch(`${API_URL}/payment/${paymentId}/toggle`);
-            fetchDashboardData(); // Refetch to sync UI with DB
+            fetchDashboardData();
         } catch (error) {
             console.error("Failed to toggle payment:", error);
         }
@@ -154,7 +140,6 @@ const Dashboard = () => {
         setSelectedCustomer(customer);
         setHistoryModalOpen(true);
         try {
-            // Fetch history from the newly added backend route
             const res = await axios.get(`${API_URL}/${customer._id}/history`);
             setCustomerHistory(res.data);
         } catch (error) {
@@ -166,20 +151,13 @@ const Dashboard = () => {
         .filter(record => record.status === 'Paid')
         .reduce((sum, record) => sum + record.amount, 0);
 
-    // --- WHATSAPP LOGIC ---
     const handleSendWhatsApp = (customer, type) => {
         const { name, phone, monthlyAmount, gender } = customer;
         const month = getCurrentMonthStr();
-
-        // Determine honorific
         const honorific = gender === 'female' ? " Ma'am" : " Sir";
-
-        // Your UPI Details
         const upiId = "quicklyajithda3@okicici"; 
 
         let message = "";
-
-        // Generate the correct message based on the button clicked
         if (type === 'request') {
             message = `Hello ${name}${honorific},\n\nThis is a reminder for your ${month} car cleaning fee of ₹${monthlyAmount}.\n\nPlease make the payment to this UPI ID: ${upiId}\n\nThank you! 🚗✨`;
         } else if (type === 'reminder') {
@@ -188,90 +166,89 @@ const Dashboard = () => {
             message = `Hi ${name}${honorific},\n\nPayment of ₹${monthlyAmount} for ${month} received!\n\nThank you for choosing us! 🚗💧`;
         }
 
-        // Format the phone number for the WhatsApp API
         let cleanPhone = phone.toString().replace(/\D/g, '');
-
-        // Automatically append +91 for Indian numbers if not already present
         if (cleanPhone.length === 10) {
             cleanPhone = '91' + cleanPhone;
         }
 
-        // Create the URL and open it in a new tab
         const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
         window.open(whatsappUrl, '_blank');
     };
-
-
-
-
 
     const filteredCustomers = dashboardData.filter(c =>
         c.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
+    // Reusable Status Badge Component to keep code DRY
+    const StatusBadge = ({ status }) => {
+        if (status === 'Paid') return <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-emerald-50 text-emerald-600 border border-emerald-100">Paid</span>;
+        if (status === 'Pending') return <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-rose-50 text-rose-600 border border-rose-100">Pending</span>;
+        return <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">No Record</span>;
+    };
+
     return (
-        <div className="min-h-screen bg-slate-50 p-6 md:p-8 font-sans relative">
+        <div className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8 font-sans relative">
 
             {/* Header */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 lg:mb-8 gap-4 lg:gap-6">
                 <div>
-                    <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
-                        <span className="text-blue-600">🚗</span> AutoFlow Manager
+                    <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+                        <span className="text-blue-600 text-3xl">🚗</span> AutoFlow Manager
                     </h1>
-                    <p className="text-slate-500 mt-1">Track monthly subscriptions and automate payment reminders.</p>
+                    <p className="text-sm sm:text-base text-slate-500 mt-1">Track monthly subscriptions and automate payment reminders.</p>
                 </div>
-                <div className="flex items-center gap-3 w-full md:w-auto">
-                    <button onClick={startNewMonth} className="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-5 py-2.5 rounded-xl font-medium shadow-sm transition-all active:scale-95 flex items-center justify-center gap-2 flex-1 md:flex-none">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
+                    <button onClick={startNewMonth} className="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-5 py-2.5 rounded-xl font-medium shadow-sm transition-all active:scale-95 flex items-center justify-center gap-2">
                         <CalendarDays size={20} className="text-indigo-600" /> Start New Month
                     </button>
-                    <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-medium shadow-md shadow-blue-600/20 transition-all active:scale-95 flex items-center justify-center gap-2 flex-1 md:flex-none">
+                    <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-medium shadow-md shadow-blue-600/20 transition-all active:scale-95 flex items-center justify-center gap-2">
                         <Plus size={20} strokeWidth={2.5} /> Add Customer
                     </button>
                 </div>
             </div>
 
-            {/* Financial Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-center">
+            {/* Financial Stats Grid (Responsive 1 -> 2 -> 4 columns) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-6 mb-6 lg:mb-8">
+                <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-center">
                     <div className="flex items-center gap-3 mb-2">
                         <div className="bg-blue-50 p-2 rounded-lg text-blue-600"><Users size={20} /></div>
-                        <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Customers</h2>
+                        <h2 className="text-xs sm:text-sm font-semibold text-slate-500 uppercase tracking-wider">Customers</h2>
                     </div>
-                    <p className="text-3xl font-extrabold text-slate-900">{totalCustomers}</p>
+                    <p className="text-2xl sm:text-3xl font-extrabold text-slate-900">{totalCustomers}</p>
                 </div>
 
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-center">
+                <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-center">
                     <div className="flex items-center gap-3 mb-2">
                         <div className="bg-slate-50 p-2 rounded-lg text-slate-600"><IndianRupee size={20} /></div>
-                        <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Expected</h2>
+                        <h2 className="text-xs sm:text-sm font-semibold text-slate-500 uppercase tracking-wider">Expected</h2>
                     </div>
-                    <p className="text-3xl font-extrabold text-slate-900">₹{expectedRevenue}</p>
+                    <p className="text-2xl sm:text-3xl font-extrabold text-slate-900">₹{expectedRevenue}</p>
                 </div>
 
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-emerald-100 flex flex-col justify-center relative overflow-hidden">
+                <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-emerald-100 flex flex-col justify-center relative overflow-hidden">
                     <div className="absolute top-0 right-0 p-4 opacity-10"><CheckCircle2 size={64} className="text-emerald-500" /></div>
                     <div className="flex items-center gap-3 mb-2 relative z-10">
                         <div className="bg-emerald-50 p-2 rounded-lg text-emerald-600"><CheckCircle2 size={20} /></div>
-                        <h2 className="text-sm font-semibold text-emerald-700 uppercase tracking-wider">Collected</h2>
+                        <h2 className="text-xs sm:text-sm font-semibold text-emerald-700 uppercase tracking-wider">Collected</h2>
                     </div>
-                    <p className="text-3xl font-extrabold text-emerald-700 relative z-10">₹{collectedRevenue}</p>
+                    <p className="text-2xl sm:text-3xl font-extrabold text-emerald-700 relative z-10">₹{collectedRevenue}</p>
                 </div>
 
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-rose-100 flex flex-col justify-center relative overflow-hidden">
+                <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-rose-100 flex flex-col justify-center relative overflow-hidden">
                     <div className="absolute top-0 right-0 p-4 opacity-10"><AlertCircle size={64} className="text-rose-500" /></div>
                     <div className="flex items-center gap-3 mb-2 relative z-10">
                         <div className="bg-rose-50 p-2 rounded-lg text-rose-600"><Clock size={20} /></div>
-                        <h2 className="text-sm font-semibold text-rose-700 uppercase tracking-wider">Pending</h2>
+                        <h2 className="text-xs sm:text-sm font-semibold text-rose-700 uppercase tracking-wider">Pending</h2>
                     </div>
-                    <p className="text-3xl font-extrabold text-rose-600 relative z-10">₹{pendingDues}</p>
+                    <p className="text-2xl sm:text-3xl font-extrabold text-rose-600 relative z-10">₹{pendingDues}</p>
                 </div>
             </div>
 
-            {/* Customer Table */}
+            {/* Main Content Area */}
             <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="px-6 py-5 border-b border-slate-100 flex flex-col md:flex-row md:justify-between md:items-center bg-slate-50/50 gap-4">
+                <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-slate-100 flex flex-col md:flex-row md:justify-between md:items-center bg-slate-50/50 gap-4">
                     <h2 className="text-lg font-bold text-slate-900">Active Subscriptions</h2>
-                    <div className="relative w-full md:w-64">
+                    <div className="relative w-full md:w-72">
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                             <Search className="h-4 w-4 text-slate-400" />
                         </div>
@@ -280,104 +257,140 @@ const Dashboard = () => {
                 </div>
 
                 {filteredCustomers.length === 0 ? (
-                    <div className="p-12 flex flex-col items-center justify-center text-center">
+                    <div className="p-8 sm:p-12 flex flex-col items-center justify-center text-center">
                         <div className="bg-slate-100 p-5 rounded-full mb-4 text-slate-400"><Users size={36} strokeWidth={1.5} /></div>
-                        <h3 className="text-slate-900 font-bold text-xl mb-2">No customers found</h3>
-                        <p className="text-slate-500 max-w-sm mb-6 leading-relaxed">
+                        <h3 className="text-slate-900 font-bold text-lg sm:text-xl mb-2">No customers found</h3>
+                        <p className="text-slate-500 text-sm sm:text-base max-w-sm mb-6 leading-relaxed">
                             {searchTerm ? "No customers match your search criteria." : "Add your first car cleaning customer to start tracking monthly payments."}
                         </p>
                     </div>
                 ) : (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="bg-white border-b border-slate-200">
-                                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Name</th>
-                                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Phone</th>
-                                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Amount</th>
-                                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
-                                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {filteredCustomers.map((c) => (
-                                    <tr key={c._id} className="hover:bg-slate-50 transition-colors group">
-                                        <td className="px-6 py-4 whitespace-nowrap font-bold text-slate-900">
-                                            {c.name} <span className="text-xs font-normal text-slate-400 ml-1">({c.gender?.charAt(0).toUpperCase() || 'M'})</span>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-slate-600 font-medium">+91 {c.phone}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap font-bold text-slate-900">₹{c.monthlyAmount}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            {c.status === 'Paid' ? (
-                                                <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-emerald-50 text-emerald-600 border border-emerald-100">Paid</span>
-                                            ) : c.status === 'Pending' ? (
-                                                <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-rose-50 text-rose-600 border border-rose-100">Pending</span>
-                                            ) : (
-                                                <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">No Record</span>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap flex items-center justify-end gap-3">
+                    <>
+                        {/* --- MOBILE VIEW (Cards) --- */}
+                        <div className="block lg:hidden divide-y divide-slate-100">
+                            {filteredCustomers.map((c) => (
+                                <div key={c._id} className="p-4 bg-white hover:bg-slate-50 transition-colors">
+                                    <div className="flex justify-between items-start mb-3">
+                                        <div>
+                                            <h3 className="font-bold text-slate-900 text-base flex items-center gap-1">
+                                                {c.name} 
+                                                <span className="text-xs font-normal text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-md">
+                                                    {c.gender?.charAt(0).toUpperCase() || 'M'}
+                                                </span>
+                                            </h3>
+                                            <p className="text-slate-500 text-sm mt-0.5">+91 {c.phone}</p>
+                                        </div>
+                                        <div className="text-right flex flex-col items-end gap-1">
+                                            <div className="font-bold text-slate-900 text-lg">₹{c.monthlyAmount}</div>
+                                            <StatusBadge status={c.status} />
+                                        </div>
+                                    </div>
 
-                                            {/* Verification Toggle - Requires paymentId from the joined data */}
+                                    {/* Action Buttons for Mobile */}
+                                    <div className="pt-3 mt-3 border-t border-slate-50 flex flex-wrap gap-2 justify-between items-center">
+                                        <div className="flex flex-wrap gap-2 flex-1">
                                             {c.paymentId && (
-                                                <button
-                                                    onClick={() => togglePaymentStatus(c.paymentId)}
-                                                    className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all mr-2 ${c.status === 'Pending'
-                                                            ? 'bg-slate-100 text-slate-600 hover:bg-emerald-100 hover:text-emerald-700'
-                                                            : 'bg-slate-100 text-slate-600 hover:bg-rose-100 hover:text-rose-700'
-                                                        }`}
-                                                >
+                                                <button onClick={() => togglePaymentStatus(c.paymentId)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex-1 text-center ${c.status === 'Pending' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
                                                     {c.status === 'Pending' ? 'Mark Paid' : 'Mark Pending'}
                                                 </button>
                                             )}
-
-                                            {/* WhatsApp Logic */}
-                                            {/* WhatsApp Logic */}
+                                            
                                             {c.status === 'Pending' || c.status === 'No Record' ? (
                                                 <>
-                                                    <button onClick={() => handleSendWhatsApp(c, 'request')} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 rounded-lg text-sm font-semibold transition-all" title="Send Request">
-                                                        <MessageCircle size={16} /> Msg
+                                                    <button onClick={() => handleSendWhatsApp(c, 'request')} className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-semibold flex-1">
+                                                        <MessageCircle size={14} /> Msg
                                                     </button>
-                                                    <button onClick={() => handleSendWhatsApp(c, 'reminder')} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:text-rose-800 rounded-lg text-sm font-semibold transition-all" title="Send Reminder">
-                                                        <AlertCircle size={16} /> Remind
+                                                    <button onClick={() => handleSendWhatsApp(c, 'reminder')} className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-rose-50 text-rose-700 rounded-lg text-xs font-semibold flex-1">
+                                                        <AlertCircle size={14} /> Remind
                                                     </button>
                                                 </>
                                             ) : (
-                                                <button onClick={() => handleSendWhatsApp(c, 'thankyou')} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800 rounded-lg text-sm font-semibold transition-all" title="Send Thank You">
-                                                    <MessageCircle size={16} /> Thanks
+                                                <button onClick={() => handleSendWhatsApp(c, 'thankyou')} className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-semibold flex-1">
+                                                    <MessageCircle size={14} /> Thanks
                                                 </button>
                                             )}
+                                        </div>
+                                        
+                                        <div className="flex items-center gap-1 ml-2">
+                                            <button onClick={() => openHistory(c)} className="p-2 text-slate-400 bg-slate-50 hover:text-indigo-600 rounded-lg"><History size={16} /></button>
+                                            <button onClick={() => handleEdit(c)} className="p-2 text-slate-400 bg-slate-50 hover:text-blue-600 rounded-lg"><Edit size={16} /></button>
+                                            <button onClick={() => handleDelete(c._id)} className="p-2 text-slate-400 bg-slate-50 hover:text-rose-600 rounded-lg"><Trash2 size={16} /></button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
 
-                                            {/* Action Buttons */}
-                                            <div className="flex items-center gap-1 ml-2 pl-3 border-l border-slate-200">
-                                                <button onClick={() => openHistory(c)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="View Payment History">
-                                                    <History size={18} />
-                                                </button>
-                                                <button onClick={() => handleEdit(c)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Edit Customer">
-                                                    <Edit size={18} />
-                                                </button>
-                                                <button onClick={() => handleDelete(c._id)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="Delete Customer">
-                                                    <Trash2 size={18} />
-                                                </button>
-                                            </div>
-                                        </td>
+                        {/* --- DESKTOP VIEW (Table) --- */}
+                        <div className="hidden lg:block overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="bg-white border-b border-slate-200">
+                                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Name</th>
+                                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Phone</th>
+                                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Amount</th>
+                                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {filteredCustomers.map((c) => (
+                                        <tr key={c._id} className="hover:bg-slate-50 transition-colors group">
+                                            <td className="px-6 py-4 whitespace-nowrap font-bold text-slate-900">
+                                                {c.name} <span className="text-xs font-normal text-slate-400 ml-1">({c.gender?.charAt(0).toUpperCase() || 'M'})</span>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-slate-600 font-medium">+91 {c.phone}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap font-bold text-slate-900">₹{c.monthlyAmount}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <StatusBadge status={c.status} />
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap flex items-center justify-end gap-2">
+                                                
+                                                {c.paymentId && (
+                                                    <button onClick={() => togglePaymentStatus(c.paymentId)} className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all mr-1 ${c.status === 'Pending' ? 'bg-slate-100 text-slate-600 hover:bg-emerald-100 hover:text-emerald-700' : 'bg-slate-100 text-slate-600 hover:bg-rose-100 hover:text-rose-700'}`}>
+                                                        {c.status === 'Pending' ? 'Mark Paid' : 'Mark Pending'}
+                                                    </button>
+                                                )}
+
+                                                {c.status === 'Pending' || c.status === 'No Record' ? (
+                                                    <>
+                                                        <button onClick={() => handleSendWhatsApp(c, 'request')} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 rounded-lg text-sm font-semibold transition-all" title="Send Request">
+                                                            <MessageCircle size={16} /> Msg
+                                                        </button>
+                                                        <button onClick={() => handleSendWhatsApp(c, 'reminder')} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:text-rose-800 rounded-lg text-sm font-semibold transition-all" title="Send Reminder">
+                                                            <AlertCircle size={16} /> Remind
+                                                        </button>
+                                                    </>
+                                                ) : (
+                                                    <button onClick={() => handleSendWhatsApp(c, 'thankyou')} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800 rounded-lg text-sm font-semibold transition-all" title="Send Thank You">
+                                                        <MessageCircle size={16} /> Thanks
+                                                    </button>
+                                                )}
+
+                                                <div className="flex items-center gap-1 ml-2 pl-3 border-l border-slate-200">
+                                                    <button onClick={() => openHistory(c)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="View Payment History"><History size={18} /></button>
+                                                    <button onClick={() => handleEdit(c)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Edit Customer"><Edit size={18} /></button>
+                                                    <button onClick={() => handleDelete(c._id)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="Delete Customer"><Trash2 size={18} /></button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </>
                 )}
             </div>
 
             {/* --- ADD/EDIT CUSTOMER MODAL --- */}
             {isModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-opacity">
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-0 bg-slate-900/60 backdrop-blur-sm transition-opacity">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-[95%] sm:max-w-md overflow-hidden flex flex-col max-h-[90vh]">
                         <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center shrink-0">
                             <h3 className="text-xl font-bold text-slate-900">{editingId ? "Edit Customer" : "Add New Customer"}</h3>
                             <button onClick={resetForm} className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 p-2 rounded-full transition-all"><X size={20} strokeWidth={2.5} /></button>
                         </div>
-                        <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto">
+                        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 sm:space-y-5 overflow-y-auto">
                             <div>
                                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">Customer Name</label>
                                 <input type="text" name="name" value={formData.name} onChange={handleInputChange} placeholder="e.g. Rahul Sharma" className="w-full border border-slate-300 rounded-xl px-4 py-3 text-slate-900 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-600 outline-none transition-all" required />
@@ -393,7 +406,7 @@ const Dashboard = () => {
                             <div>
                                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">Phone Number</label>
                                 <div className="flex border border-slate-300 rounded-xl overflow-hidden focus-within:ring-4 focus-within:ring-blue-500/10 focus-within:border-blue-600 transition-all bg-white">
-                                    <span className="flex items-center justify-center px-4 bg-slate-50 text-slate-500 font-medium border-r border-slate-300">+91</span>
+                                    <span className="flex items-center justify-center px-3 sm:px-4 bg-slate-50 text-slate-500 font-medium border-r border-slate-300">+91</span>
                                     <input type="tel" name="phone" value={formData.phone} onChange={handleInputChange} placeholder="98765 43210" className="w-full px-4 py-3 text-slate-900 outline-none bg-transparent" required />
                                 </div>
                             </div>
@@ -401,9 +414,9 @@ const Dashboard = () => {
                                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">Monthly Amount (₹)</label>
                                 <input type="number" name="amount" value={formData.amount} onChange={handleInputChange} placeholder="e.g. 500" className="w-full border border-slate-300 rounded-xl px-4 py-3 text-slate-900 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-600 outline-none transition-all" required />
                             </div>
-                            <div className="pt-4 border-t border-slate-100 flex justify-end gap-3">
-                                <button type="button" onClick={resetForm} className="px-5 py-2.5 text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl font-semibold transition-all">Cancel</button>
-                                <button type="submit" className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold shadow-md active:scale-95 transition-all flex items-center gap-2"><Save size={18} strokeWidth={2.5} /> {editingId ? 'Update' : 'Save'}</button>
+                            <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row justify-end gap-3">
+                                <button type="button" onClick={resetForm} className="px-5 py-2.5 text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl font-semibold transition-all w-full sm:w-auto text-center">Cancel</button>
+                                <button type="submit" className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold shadow-md active:scale-95 transition-all flex items-center justify-center gap-2 w-full sm:w-auto"><Save size={18} strokeWidth={2.5} /> {editingId ? 'Update' : 'Save'}</button>
                             </div>
                         </form>
                     </div>
@@ -412,8 +425,8 @@ const Dashboard = () => {
 
             {/* --- HISTORY MODAL --- */}
             {historyModalOpen && selectedCustomer && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-opacity">
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col max-h-[80vh]">
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-0 bg-slate-900/60 backdrop-blur-sm transition-opacity">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-[95%] sm:max-w-sm overflow-hidden flex flex-col max-h-[80vh]">
                         <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                             <div>
                                 <h3 className="text-lg font-bold text-slate-900">Payment History</h3>
@@ -425,7 +438,7 @@ const Dashboard = () => {
                             <span className="font-semibold text-indigo-800">Total Collected:</span>
                             <span className="text-xl font-bold text-indigo-600">₹{totalPaidBySelected}</span>
                         </div>
-                        <div className="p-6 overflow-y-auto bg-white">
+                        <div className="p-4 sm:p-6 overflow-y-auto bg-white flex-1">
                             {customerHistory.length === 0 ? (
                                 <div className="text-center py-6 text-slate-500">
                                     <Clock className="mx-auto mb-2 opacity-20" size={32} />
@@ -452,8 +465,8 @@ const Dashboard = () => {
                                 </ul>
                             )}
                         </div>
-                        <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
-                            <button onClick={() => setHistoryModalOpen(false)} className="px-5 py-2 w-full text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl font-semibold transition-all">Close</button>
+                        <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end shrink-0">
+                            <button onClick={() => setHistoryModalOpen(false)} className="px-5 py-2.5 w-full text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl font-semibold transition-all">Close</button>
                         </div>
                     </div>
                 </div>
