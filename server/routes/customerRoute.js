@@ -30,7 +30,7 @@ cusRouter.get("/monthly-summary", getMonthlySummary);
 
 cusRouter.post("/set-month", setActiveMonth);
 cusRouter.get("/get-month", getActiveMonth);
-router.get("/monthly-summary-all", getAllMonthlySummaries);
+cusRouter.get("/monthly-summary-all", getAllMonthlySummaries);
 
 /// ✅ HISTORY
 cusRouter.get("/:id/history", getCustomerHistory);
