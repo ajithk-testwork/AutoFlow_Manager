@@ -10,6 +10,20 @@ const paymentSchema = new mongoose.Schema({
     type: String,
     default: "Pending"
   },
+  dailyStatus: [
+    {
+      date: String,
+      status: {
+        type: String,
+        enum: ["Cleaned", "Missed"],
+        default: "Cleaned"
+      }
+    }
+  ],
+  missedDays: {
+    type: Number,
+    default: 0
+  },
   amount: Number,
   paidDate: String
 }, { timestamps: true });

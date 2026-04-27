@@ -64,34 +64,89 @@ export const togglePayment = async (req, res) => {
 };
 
 
+export const getPaymentsByMonth = async (req, res) => {
+  try {
+    const { month } = req.query;
 
-//Start New month
-export const startNewMonth = async (req, res) => {
-  const customers = await Customer.find();
+    if (!month) {
+      return res.status(400).json({ message: "Month is required" });
+    }
 
-  const newMonth = new Date().toLocaleString("default", {
-    month: "long",
-    year: "numeric"
-  });
+    const payments = await Payment.find({ month })
+      .populate("customerId", "name phone monthlyAmount");
 
-  const payments = customers.map(c => ({
-    customerId: c._id,
-    month: newMonth,
-    amount: c.monthlyAmount,
-    status: "Pending"
-  }));
-
-  await Payment.insertMany(payments);
-
-  res.json({ message: "New month created" });
+    res.json(payments);
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching payments" });
+  }
 };
 
 
-export const getPaymentsByMonth = async (req, res) => {
-  const { month } = req.query;
 
-  const payments = await Payment.find({ month })
-    .populate("customerId", "name phone monthlyAmount");
+//Start New month
+export const startNewMonth = async (req, res) => {
+  try {
+    const customers = await Customer.find();
 
-  res.json(payments);
+    const newMonth = new Date().toLocaleString("default", {
+      month: "long",
+      year: "numeric"
+    });
+
+    // ✅ جلوگیری duplicate month
+    const exists = await Payment.findOne({ month: newMonth });
+
+    if (exists) {
+      return res.json({ message: "Month already created" });
+    }
+
+    const payments = customers.map(c => ({
+      customerId: c._id,
+      month: newMonth,
+      amount: c.monthlyAmount,
+      status: "Pending",
+
+      // ✅ NEW FIELDS
+      dailyStatus: [],
+      missedDays: 0
+    }));
+
+    await Payment.insertMany(payments);
+
+    res.json({ message: "New month created successfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Error creating month" });
+  }
+};
+
+
+export const updateDailyStatus = async (req, res) => {
+  const { paymentId, date, status } = req.body;
+
+  const payment = await Payment.findById(paymentId);
+
+  if (!payment) {
+    return res.status(404).json({ message: "Payment not found" });
+  }
+
+  const existing = payment.dailyStatus.find(d => d.date === date);
+
+  if (existing) {
+    existing.status = status;
+  } else {
+    payment.dailyStatus.push({ date, status });
+  }
+
+  // calculate missed days
+  payment.missedDays = payment.dailyStatus.filter(
+    d => d.status === "Missed"
+  ).length;
+
+  // reduce amount
+  const perDay = payment.amount / 30;
+  payment.amount = payment.customerId.monthlyAmount - (payment.missedDays * perDay);
+
+  await payment.save();
+
+  res.json(payment);
 };
