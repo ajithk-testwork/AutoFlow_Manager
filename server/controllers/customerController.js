@@ -57,22 +57,44 @@ export const deleteCustomer = async (req, res) => {
 
 // TOGGLE PAYMENT
 export const togglePayment = async (req, res) => {
-  const payment = await Payment.findById(req.params.id);
+  try {
+    const payment = await Payment.findById(req.params.id);
 
-  if (!payment) {
-    return res.status(404).json({ message: "Payment not found" });
+    if (!payment) {
+      return res.status(404).json({ message: "Payment not found" });
+    }
+
+    const customer = await Customer.findById(payment.customerId);
+
+    // Get all logs for this month
+    const logs = await DailyLog.find({ customerId: customer._id });
+
+    const cleanedDays = logs.filter(l => l.status === "Cleaned").length;
+    const skippedDays = logs.filter(l => l.status === "Skipped").length;
+
+    const totalDays = cleanedDays + skippedDays || 30;
+
+    const perDay = customer.monthlyAmount / totalDays;
+
+    const finalAmount =
+      cleanedDays === 0 ? customer.monthlyAmount :
+      Math.round(customer.monthlyAmount - (skippedDays * perDay));
+
+    if (payment.status === "Pending") {
+      payment.status = "Paid";
+      payment.paidDate = new Date().toLocaleDateString();
+      payment.amount = finalAmount; // ✅ IMPORTANT
+    } else {
+      payment.status = "Pending";
+      payment.paidDate = null;
+    }
+
+    await payment.save();
+
+    res.json(payment);
+  } catch (error) {
+    res.status(500).json({ message: "Server Error" });
   }
-
-  if (payment.status === "Pending") {
-    payment.status = "Paid";
-    payment.paidDate = new Date().toLocaleDateString();
-  } else {
-    payment.status = "Pending";
-    payment.paidDate = null;
-  }
-
-  await payment.save();
-  res.json(payment);
 };
 
 // ✅ NEW: Create daily log (AUTO-CREATE)
@@ -123,32 +145,24 @@ export const getPaymentsByMonth = async (req, res) => {
 export const getMonthlySummary = async (req, res) => {
   try {
     const { customerId } = req.query;
-    
+
     const customer = await Customer.findById(customerId);
     if (!customer) {
       return res.status(404).json({ message: "Customer not found" });
     }
-    
+
     const today = new Date();
     const year = today.getFullYear();
     const month = today.getMonth();
-    
-    // Get customer join date
-    const joinDate = new Date(customer.createdAt);
-    const startDate = new Date(year, month, Math.max(1, joinDate.getDate()));
-    
-    // If customer joined after current month, start from join date
-    if (joinDate.getFullYear() === year && joinDate.getMonth() === month) {
-      startDate.setDate(joinDate.getDate());
-    }
-    
+
+    // Month start & end
+    const startDate = new Date(year, month, 1);
     const endDate = new Date(year, month + 1, 0);
-    
-    // Format dates for query
+
     const startDateStr = startDate.toISOString().split("T")[0];
     const endDateStr = endDate.toISOString().split("T")[0];
-    
-    // Get logs from start date to end of month
+
+    // Get logs
     const logs = await DailyLog.find({
       customerId,
       date: {
@@ -156,25 +170,57 @@ export const getMonthlySummary = async (req, res) => {
         $lte: endDateStr
       }
     });
-    
-    const totalDays = logs.length;
-    const cleanedDays = logs.filter(l => l.status === "Cleaned").length;
-    const skippedDays = logs.filter(l => l.status === "Skipped").length;
-    
-    // ✅ Dynamic calculation (no storage)
-    const daysInMonth = endDate.getDate();
-    const daysInMonthFromStart = daysInMonth - startDate.getDate() + 1;
-    
-    // Calculate per day rate based on actual days in month from start date
-    const perDayRate = customer.monthlyAmount / daysInMonthFromStart;
-    const finalAmount = customer.monthlyAmount - (skippedDays * perDayRate);
-    
+
+    // ✅ Generate ALL working days (Mon–Sat)
+    let workingDays = [];
+    for (let d = 1; d <= endDate.getDate(); d++) {
+      const date = new Date(year, month, d);
+      if (date.getDay() !== 0) { // Sunday off
+        workingDays.push(d);
+      }
+    }
+
+    const totalWorkingDays = workingDays.length;
+
+    let cleanedDays = 0;
+    let skippedDays = 0;
+
+    // ✅ If no logs → assume FULL service
+    if (logs.length === 0) {
+      cleanedDays = totalWorkingDays;
+      skippedDays = 0;
+    } else {
+      for (const day of workingDays) {
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+        const log = logs.find(l => l.date === dateStr);
+
+        if (log && log.status === "Cleaned") {
+          cleanedDays++;
+        } else {
+          skippedDays++;
+        }
+      }
+    }
+
+    // ✅ Per day calculation
+    const perDayRate = customer.monthlyAmount / totalWorkingDays;
+
+    let finalAmount;
+
+    if (cleanedDays === totalWorkingDays) {
+      finalAmount = customer.monthlyAmount; // full payment
+    } else {
+      finalAmount = customer.monthlyAmount - (skippedDays * perDayRate);
+    }
+
     res.json({
-      totalDays,
+      totalDays: totalWorkingDays,
       cleanedDays,
       skippedDays,
       finalAmount: Math.round(finalAmount)
     });
+
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Server Error" });
@@ -240,4 +286,58 @@ export const setActiveMonth = async (req, res) => {
 export const getActiveMonth = async (req, res) => {
   const config = await Config.findOne();
   res.json(config);
+};
+
+
+export const getAllMonthlySummaries = async (req, res) => {
+  try {
+    const customers = await Customer.find();
+
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = today.getMonth();
+
+    const results = [];
+
+    for (const customer of customers) {
+      const joinDate = new Date(customer.createdAt);
+
+      const startDate = new Date(year, month, Math.max(1, joinDate.getDate()));
+      if (joinDate.getFullYear() === year && joinDate.getMonth() === month) {
+        startDate.setDate(joinDate.getDate());
+      }
+
+      const endDate = new Date(year, month + 1, 0);
+
+      const startDateStr = startDate.toISOString().split("T")[0];
+      const endDateStr = endDate.toISOString().split("T")[0];
+
+      const logs = await DailyLog.find({
+        customerId: customer._id,
+        date: { $gte: startDateStr, $lte: endDateStr }
+      });
+
+      const totalDays = logs.length;
+      const cleanedDays = logs.filter(l => l.status === "Cleaned").length;
+      const skippedDays = logs.filter(l => l.status === "Skipped").length;
+
+      const daysInMonth = endDate.getDate();
+      const daysInMonthFromStart = daysInMonth - startDate.getDate() + 1;
+
+      const perDayRate = customer.monthlyAmount / daysInMonthFromStart;
+      const finalAmount = customer.monthlyAmount - (skippedDays * perDayRate);
+
+      results.push({
+        customerId: customer._id,
+        finalAmount: Math.round(finalAmount),
+        cleanedDays,
+        skippedDays,
+        totalDays
+      });
+    }
+
+    res.json(results);
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
+  }
 };
