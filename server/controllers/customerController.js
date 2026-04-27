@@ -134,32 +134,44 @@ export const startNewMonth = async (req, res) => {
 
 
 export const updateDailyStatus = async (req, res) => {
-  const { paymentId, date, status } = req.body;
+  try {
+    let { paymentId, date, status } = req.body;
 
-  const payment = await Payment.findById(paymentId);
+    const payment = await Payment.findById(paymentId).populate("customerId");
 
-  if (!payment) {
-    return res.status(404).json({ message: "Payment not found" });
+    if (!payment) {
+      return res.status(404).json({ message: "Payment not found" });
+    }
+
+    // ✅ FORCE SAME FORMAT (YYYY-MM-DD)
+    const formattedDate = new Date(date).toISOString().split("T")[0];
+
+    const existing = payment.dailyStatus.find(d => d.date === formattedDate);
+
+    if (existing) {
+      existing.status = status;
+    } else {
+      payment.dailyStatus.push({ date: formattedDate, status });
+    }
+
+    // ✅ calculate missed days
+    const missedDays = payment.dailyStatus.filter(
+      d => d.status === "Missed"
+    ).length;
+
+    payment.missedDays = missedDays;
+
+    // ✅ correct amount calculation
+    const monthlyAmount = payment.customerId.monthlyAmount;
+    const perDay = monthlyAmount / 30;
+
+    payment.amount = monthlyAmount - (missedDays * perDay);
+
+    await payment.save();
+
+    res.json(payment);
+
+  } catch (error) {
+    res.status(500).json({ message: "Error updating daily status" });
   }
-
-  const existing = payment.dailyStatus.find(d => d.date === date);
-
-  if (existing) {
-    existing.status = status;
-  } else {
-    payment.dailyStatus.push({ date, status });
-  }
-
-  // calculate missed days
-  payment.missedDays = payment.dailyStatus.filter(
-    d => d.status === "Missed"
-  ).length;
-
-  // reduce amount
-  const perDay = payment.amount / 30;
-  payment.amount = payment.customerId.monthlyAmount - (payment.missedDays * perDay);
-
-  await payment.save();
-
-  res.json(payment);
 };
