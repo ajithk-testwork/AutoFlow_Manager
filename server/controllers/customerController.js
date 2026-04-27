@@ -82,6 +82,19 @@ export const getPaymentsByMonth = async (req, res) => {
 };
 
 
+export const getSinglePayment = async (req, res) => {
+  try {
+    const payment = await Payment.findById(req.params.id);
+
+    if (!payment) {
+      return res.status(404).json({ message: "Payment not found" });
+    }
+
+    res.json(payment);
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching payment" });
+  }
+};
 
 //Start New month
 export const startNewMonth = async (req, res) => {

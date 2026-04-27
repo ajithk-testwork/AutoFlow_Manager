@@ -7,7 +7,8 @@ import {
   startNewMonth,
   getPaymentsByMonth,
   getCustomerHistory,
-  updateDailyStatus
+  updateDailyStatus,
+  getSinglePayment
 } from "../controllers/customerController.js";
 
 const cusRouter = express.Router();
@@ -22,5 +23,6 @@ cusRouter.patch("/payment/:id/toggle", togglePayment);
 cusRouter.post("/start-month", startNewMonth);
 cusRouter.get("/payments", getPaymentsByMonth);
 cusRouter.post("/daily-status", updateDailyStatus);
+cusRouter.get("/payment/:id", getSinglePayment);
 
 export default cusRouter;
