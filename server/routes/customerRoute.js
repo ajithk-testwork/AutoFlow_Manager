@@ -10,7 +10,9 @@ import {
   toggleDailyStatus,
   getDailyLogsByCustomer,
   getMonthlySummary,
-  createDailyLog
+  createDailyLog,
+  setActiveMonth,
+  getActiveMonth
 } from "../controllers/customerController.js";
 
 const cusRouter = express.Router();
@@ -24,6 +26,9 @@ cusRouter.patch("/daily/:id/toggle", toggleDailyStatus);
 cusRouter.get("/payments", getPaymentsByMonth);
 cusRouter.patch("/payment/:id/toggle", togglePayment);
 cusRouter.get("/monthly-summary", getMonthlySummary);
+
+cusRouter.post("/set-month", setActiveMonth);
+cusRouter.get("/get-month", getActiveMonth);
 
 /// ✅ HISTORY
 cusRouter.get("/:id/history", getCustomerHistory);

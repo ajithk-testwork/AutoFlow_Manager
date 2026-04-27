@@ -1,6 +1,7 @@
 import Customer from "../models/Customer.js";
 import Payment from "../models/Payment.js";
 import DailyLog from "../models/DailyLog.js";
+import Config from "../models/Config.js";
 
 // GET all customers
 export const getCustomers = async (req, res) => {
@@ -102,7 +103,7 @@ export const createDailyLog = async (req, res) => {
   }
 };
 
-// ✅ REMOVED: startNewMonth (no longer needed)
+
 
 // Get payments by month
 export const getPaymentsByMonth = async (req, res) => {
@@ -212,4 +213,31 @@ export const getDailyLogsByCustomer = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: "Server Error" });
   }
+};
+
+
+// SET ACTIVE MONTH
+export const setActiveMonth = async (req, res) => {
+  const { month, year } = req.body;
+
+  let config = await Config.findOne();
+
+  if (!config) {
+    config = await Config.create({
+      activeMonth: month,
+      activeYear: year
+    });
+  } else {
+    config.activeMonth = month;
+    config.activeYear = year;
+    await config.save();
+  }
+
+  res.json(config);
+};
+
+// GET ACTIVE MONTH
+export const getActiveMonth = async (req, res) => {
+  const config = await Config.findOne();
+  res.json(config);
 };
