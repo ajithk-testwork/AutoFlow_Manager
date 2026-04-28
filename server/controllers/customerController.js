@@ -58,12 +58,12 @@ export const addCustomer = async (req, res) => {
       missedDays: 0
     });
 
-    res.json(newCustomer);
-  } catch {
+    res.status(201).json(newCustomer);  // ✅ Send 201 status for created
+  } catch (error) {
+    console.error("Error adding customer:", error);
     res.status(500).json({ message: "Error adding customer" });
   }
 };
-
 /* ================================
    DELETE CUSTOMER
 ================================ */
