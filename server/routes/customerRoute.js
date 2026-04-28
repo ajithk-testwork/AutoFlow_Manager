@@ -9,7 +9,8 @@ import {
   getCustomerHistory,
   updateDailyStatus,
   getSinglePayment,
-  getGlobalHistory
+  getGlobalHistory,
+  updateCustomer
 } from "../controllers/customerController.js";
 
 const cusRouter = express.Router();
@@ -19,6 +20,7 @@ cusRouter.get("/global/history", getGlobalHistory);
 cusRouter.get("/", getCustomers);
 cusRouter.get("/:id/history", getCustomerHistory);
 cusRouter.post("/", addCustomer);
+cusRouter.put("/:id", updateCustomer);
 cusRouter.delete("/:id", deleteCustomer);
 
 // NEW

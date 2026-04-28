@@ -14,7 +14,8 @@ export const getMonthKey = () => {
 ================================ */
 export const getCustomers = async (req, res) => {
   try {
-    const customers = await Customer.find();
+    // ✅ ONLY fetch active customers for new lists
+    const customers = await Customer.find({ isActive: true });
     res.json(customers);
   } catch {
     res.status(500).json({ message: "Error fetching customers" });
@@ -108,15 +109,11 @@ export const togglePayment = async (req, res) => {
 export const getPaymentsByMonth = async (req, res) => {
   try {
     let { month } = req.query;
-
-    if (!month) {
-      return res.status(400).json({ message: "Month is required" });
-    }
-
-    month = month.trim();
-
-    const payments = await Payment.find({ month })
-      .populate("customerId", "name phone monthlyAmount");
+    if (!month) return res.status(400).json({ message: "Month is required" });
+    
+    // ✅ Include 'gender' in populate so the UI can use it
+    const payments = await Payment.find({ month: month.trim() })
+      .populate("customerId", "name phone monthlyAmount gender isActive");
 
     res.json(payments);
   } catch {
@@ -146,25 +143,15 @@ export const getSinglePayment = async (req, res) => {
 ================================ */
 export const startNewMonth = async (req, res) => {
   try {
-    const customers = await Customer.find();
+    // ✅ Only create billing records for ACTIVE customers
+    const customers = await Customer.find({ isActive: true });
     let newMonth = req.body.month;
 
-    if (!newMonth) {
-      return res.status(400).json({ message: "Month is required" });
-    }
-
+    if (!newMonth) return res.status(400).json({ message: "Month is required" });
     newMonth = newMonth.trim();
 
     const existingPayments = await Payment.find({ month: newMonth });
-
-    // already full
-    if (existingPayments.length === customers.length) {
-      return res.json({ message: "Month already created" });
-    }
-
-    const existingCustomerIds = existingPayments.map(p =>
-      p.customerId.toString()
-    );
+    const existingCustomerIds = existingPayments.map(p => p.customerId.toString());
 
     const newPayments = customers
       .filter(c => !existingCustomerIds.includes(c._id.toString()))
@@ -177,10 +164,10 @@ export const startNewMonth = async (req, res) => {
         missedDays: 0
       }));
 
-    await Payment.insertMany(newPayments);
-
-    res.json({ message: "Month created successfully" });
-
+    if (newPayments.length > 0) {
+      await Payment.insertMany(newPayments);
+    }
+    res.json({ message: "Month synced successfully" });
   } catch {
     res.status(500).json({ message: "Error creating month" });
   }
@@ -262,6 +249,40 @@ export const updateDailyStatus = async (req, res) => {
   } catch (error) {
     console.error("Error updating daily status:", error);
     res.status(500).json({ message: "Error updating daily status" });
+  }
+};
+
+
+
+export const updateCustomer = async (req, res) => {
+  try {
+    const { name, phone, monthlyAmount, gender, month } = req.body;
+    
+    // Update global customer profile
+    const updatedCustomer = await Customer.findByIdAndUpdate(
+      req.params.id,
+      { name, phone, monthlyAmount, gender },
+      { new: true }
+    );
+
+    // Sync the new amount to the currently selected month
+    if (month) {
+      const payment = await Payment.findOne({ customerId: req.params.id, month: month });
+      if (payment) {
+        const [monthName, yearStr] = month.trim().split(" ");
+        const monthIndex = new Date(Date.parse(`${monthName} 1, ${yearStr}`)).getMonth();
+        const daysInMonth = new Date(parseInt(yearStr), monthIndex + 1, 0).getDate();
+        
+        const perDay = monthlyAmount / daysInMonth;
+        let finalAmount = Math.round(monthlyAmount - (payment.missedDays * perDay));
+        payment.amount = Math.max(0, finalAmount);
+        
+        await payment.save();
+      }
+    }
+    res.json(updatedCustomer);
+  } catch (error) {
+    res.status(500).json({ message: "Update failed" });
   }
 };
 

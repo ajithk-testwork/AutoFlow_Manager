@@ -1,11 +1,14 @@
 import mongoose from "mongoose";
 
-
 const customerSchema = new mongoose.Schema({
   name: String,
   phone: String,
   monthlyAmount: Number,
-  gender: String
+  gender: String,
+  isActive: { 
+    type: Boolean, 
+    default: true 
+  }
 }, { timestamps: true });
 
-export default mongoose.model("Customer", customerSchema)
+export default mongoose.model("Customer", customerSchema);
