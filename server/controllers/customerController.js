@@ -101,12 +101,14 @@ export const startNewMonth = async (req, res) => {
   try {
     const customers = await Customer.find();
 
-    const newMonth = new Date().toLocaleString("default", {
-      month: "long",
-      year: "numeric"
-    });
+    // ✅ get month from frontend
+    const newMonth = req.body.month;
 
-    // ✅ جلوگیری duplicate month
+    if (!newMonth) {
+      return res.status(400).json({ message: "Month is required" });
+    }
+
+    // ✅ prevent duplicate month
     const exists = await Payment.findOne({ month: newMonth });
 
     if (exists) {
@@ -118,8 +120,6 @@ export const startNewMonth = async (req, res) => {
       month: newMonth,
       amount: c.monthlyAmount,
       status: "Pending",
-
-      // ✅ NEW FIELDS
       dailyStatus: [],
       missedDays: 0
     }));
@@ -127,6 +127,7 @@ export const startNewMonth = async (req, res) => {
     await Payment.insertMany(payments);
 
     res.json({ message: "New month created successfully" });
+
   } catch (error) {
     res.status(500).json({ message: "Error creating month" });
   }
