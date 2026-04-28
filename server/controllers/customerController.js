@@ -97,41 +97,41 @@ export const getSinglePayment = async (req, res) => {
 };
 
 //Start New month
-export const startNewMonth = async (req, res) => {
-  try {
-    const customers = await Customer.find();
+// export const startNewMonth = async (req, res) => {
+//   try {
+//     const customers = await Customer.find();
 
-    // ✅ get month from frontend
-    const newMonth = req.body.month;
+//     // ✅ get month from frontend
+//     const newMonth = req.body.month;
 
-    if (!newMonth) {
-      return res.status(400).json({ message: "Month is required" });
-    }
+//     if (!newMonth) {
+//       return res.status(400).json({ message: "Month is required" });
+//     }
 
-    // ✅ prevent duplicate month
-    const exists = await Payment.findOne({ month: newMonth });
+//     // ✅ prevent duplicate month
+//     const exists = await Payment.findOne({ month: newMonth });
 
-    if (exists) {
-      return res.json({ message: "Month already created" });
-    }
+//     if (exists) {
+//       return res.json({ message: "Month already created" });
+//     }
 
-    const payments = customers.map(c => ({
-      customerId: c._id,
-      month: newMonth,
-      amount: c.monthlyAmount,
-      status: "Pending",
-      dailyStatus: [],
-      missedDays: 0
-    }));
+//     const payments = customers.map(c => ({
+//       customerId: c._id,
+//       month: newMonth,
+//       amount: c.monthlyAmount,
+//       status: "Pending",
+//       dailyStatus: [],
+//       missedDays: 0
+//     }));
 
-    await Payment.insertMany(payments);
+//     await Payment.insertMany(payments);
 
-    res.json({ message: "New month created successfully" });
+//     res.json({ message: "New month created successfully" });
 
-  } catch (error) {
-    res.status(500).json({ message: "Error creating month" });
-  }
-};
+//   } catch (error) {
+//     res.status(500).json({ message: "Error creating month" });
+//   }
+// };
 
 
 export const updateDailyStatus = async (req, res) => {
