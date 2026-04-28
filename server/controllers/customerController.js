@@ -264,3 +264,54 @@ export const updateDailyStatus = async (req, res) => {
     res.status(500).json({ message: "Error updating daily status" });
   }
 };
+
+
+
+
+/* ================================
+   GET GLOBAL HISTORY (NEW)
+================================ */
+export const getGlobalHistory = async (req, res) => {
+  try {
+    // Fetch all payments and populate customer details
+    const payments = await Payment.find()
+      .populate("customerId", "name phone monthlyAmount")
+      .sort({ createdAt: -1 });
+
+    // Group the payments by month
+    const grouped = payments.reduce((acc, payment) => {
+      // Skip if customer was deleted but payment remained (orphaned data)
+      if (!payment.customerId) return acc;
+
+      if (!acc[payment.month]) {
+        acc[payment.month] = {
+          month: payment.month,
+          collected: 0,
+          pending: 0,
+          payments: []
+        };
+      }
+
+      if (payment.status === 'Paid') {
+        acc[payment.month].collected += payment.amount;
+      } else {
+        acc[payment.month].pending += payment.amount;
+      }
+      
+      acc[payment.month].payments.push(payment);
+      return acc;
+    }, {});
+
+    // Convert object to array and sort by most recent month
+    const groupedArray = Object.values(grouped).sort((a, b) => {
+      const dateA = new Date(`1 ${a.month}`);
+      const dateB = new Date(`1 ${b.month}`);
+      return dateB - dateA; // Sort descending
+    });
+
+    res.json(groupedArray);
+  } catch (error) {
+    console.error("Error fetching global history:", error);
+    res.status(500).json({ message: "Server Error fetching global history" });
+  }
+};

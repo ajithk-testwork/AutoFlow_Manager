@@ -8,10 +8,13 @@ import {
   getPaymentsByMonth,
   getCustomerHistory,
   updateDailyStatus,
-  getSinglePayment
+  getSinglePayment,
+  getGlobalHistory
 } from "../controllers/customerController.js";
 
 const cusRouter = express.Router();
+
+cusRouter.get("/global/history", getGlobalHistory);
 
 cusRouter.get("/", getCustomers);
 cusRouter.get("/:id/history", getCustomerHistory);
