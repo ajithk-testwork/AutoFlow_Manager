@@ -41,13 +41,17 @@ export const getCustomerHistory = async (req, res) => {
 ================================ */
 export const addCustomer = async (req, res) => {
   try {
-    const newCustomer = await Customer.create(req.body);
+    const { month, ...customerData } = req.body;
 
-    const currentMonth = getMonthKey();
+    if (!month) {
+      return res.status(400).json({ message: "Month is required" });
+    }
+
+    const newCustomer = await Customer.create(customerData);
 
     await Payment.create({
       customerId: newCustomer._id,
-      month: currentMonth,
+      month: month.trim(),
       amount: newCustomer.monthlyAmount,
       status: "Pending",
       dailyStatus: [],
@@ -183,11 +187,11 @@ export const startNewMonth = async (req, res) => {
 };
 
 /* ================================
-   UPDATE DAILY STATUS (FIXED)
+   UPDATE DAILY STATUS (FIXED - Use explicit month parameter)
 ================================ */
 export const updateDailyStatus = async (req, res) => {
   try {
-    let { paymentId, date, status } = req.body;
+    let { paymentId, date, status, month } = req.body; // Add month parameter
 
     const payment = await Payment.findById(paymentId).populate("customerId");
 
@@ -195,11 +199,12 @@ export const updateDailyStatus = async (req, res) => {
       return res.status(404).json({ message: "Payment not found" });
     }
 
+    // ✅ FORMAT DATE - ensure consistent format
     const formattedDate = new Date(date).toISOString().split("T")[0];
 
     const existing = payment.dailyStatus.find(d => d.date === formattedDate);
 
-    /* ✅ FIX: HANDLE UNDO */
+    /* ✅ HANDLE UNDO */
     if (status === "None") {
       payment.dailyStatus = payment.dailyStatus.filter(
         d => d.date !== formattedDate
@@ -212,24 +217,50 @@ export const updateDailyStatus = async (req, res) => {
       }
     }
 
-    /* ✅ recalc missed */
+    /* ✅ RECALCULATE MISSED DAYS */
     const missedDays = payment.dailyStatus.filter(
       d => d.status === "Missed"
     ).length;
 
     payment.missedDays = missedDays;
 
-    /* ✅ FIX: ROUND VALUE */
+    /* ✅ FIXED: Use the passed month from frontend or fallback to payment.month */
+    let targetMonth = month || payment.month;
+    
+    // Parse month (e.g., "April 2026")
+    const monthParts = targetMonth.trim().split(" ");
+    if (monthParts.length !== 2) {
+      console.error("Invalid month format:", targetMonth);
+      payment.amount = monthlyAmount;
+      await payment.save();
+      return res.json(payment);
+    }
+    
+    const [monthName, yearStr] = monthParts;
+    const year = parseInt(yearStr);
+    
+    // Get month index (0-11)
+    const monthIndex = new Date(Date.parse(`${monthName} 1, ${year}`)).getMonth();
+    
+    // Get days in month
+    const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
     const monthlyAmount = payment.customerId.monthlyAmount;
-    const perDay = monthlyAmount / 30;
-
-    payment.amount = Math.round(monthlyAmount - (missedDays * perDay));
+    
+    const perDay = monthlyAmount / daysInMonth;
+    
+    // Calculate final amount
+    let finalAmount = Math.round(monthlyAmount - (missedDays * perDay));
+    // Ensure amount never goes below 0
+    finalAmount = Math.max(0, finalAmount);
+    
+    payment.amount = finalAmount;
 
     await payment.save();
 
     res.json(payment);
 
-  } catch {
+  } catch (error) {
+    console.error("Error updating daily status:", error);
     res.status(500).json({ message: "Error updating daily status" });
   }
 };
