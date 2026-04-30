@@ -4,7 +4,7 @@ import {
     Users, IndianRupee, AlertCircle, Plus, X, Save, MessageCircle,
     CheckCircle2, Clock, Edit, Trash2, Search, History, CalendarDays,
     Check, XCircle, ChevronDown, ChevronUp, AlertTriangle, Database, ArrowLeft,
-    FileText
+    FileText, Menu, X as XIcon
 } from 'lucide-react';
 
 const API_URL = 'https://autoflow-manager.onrender.com/api/customers';
@@ -369,158 +369,232 @@ const Dashboard = () => {
 
 
     // ==========================================
-    // RENDER: GLOBAL HISTORY PAGE VIEW
+    // RENDER: GLOBAL HISTORY PAGE VIEW (FULLY RESPONSIVE)
     // ==========================================
     if (currentView === 'history') {
         return (
-            <div className="min-h-screen bg-slate-50 font-sans flex flex-col animate-in fade-in duration-300 w-full overflow-hidden">
-                <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between sticky top-0 z-40 shadow-sm gap-4">
-                    <div className="flex items-center gap-4">
-                        <button onClick={() => setCurrentView('dashboard')} className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full transition-colors flex-shrink-0">
+            <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 font-sans flex flex-col w-full">
+                {/* Header */}
+                <div className="bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 sm:px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between sticky top-0 z-40 shadow-sm gap-3">
+                    <div className="flex items-center gap-3">
+                        <button 
+                            onClick={() => setCurrentView('dashboard')} 
+                            className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full transition-all duration-200 active:scale-95"
+                        >
                             <ArrowLeft size={20} strokeWidth={2.5} />
                         </button>
-                        <div className="min-w-0">
-                            <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 flex items-center gap-2 truncate">
-                                <Database className="text-indigo-600 shrink-0" /> Global Ledger
+                        <div>
+                            <h1 className="text-lg sm:text-2xl font-extrabold text-slate-900 flex items-center gap-2">
+                                <Database className="text-indigo-600" size={22} /> 
+                                <span className="truncate">Global Ledger</span>
                             </h1>
-                            <p className="text-xs sm:text-sm text-slate-500 font-medium truncate">Database history across all months</p>
+                            <p className="text-[11px] sm:text-xs text-slate-500 font-medium hidden sm:block">Database history across all months</p>
                         </div>
+                    </div>
+                    <div className="text-xs sm:text-sm bg-indigo-50 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full text-indigo-700 font-bold flex items-center gap-1 self-start sm:self-auto">
+                        <Database size={14} /> {globalHistoryData.length} Months
                     </div>
                 </div>
 
-                <div className="p-4 sm:p-6 lg:p-8 w-full max-w-full flex-1 overflow-y-auto flex flex-col gap-6">
+                {/* Main Content */}
+                <div className="flex-1 p-3 sm:p-5 lg:p-8 w-full max-w-full overflow-y-auto">
                     {isHistoryLoading ? (
-                        <div className="text-center py-20">
-                            <Clock className="mx-auto mb-4 text-indigo-300 animate-spin" size={48} />
-                            <p className="text-slate-500 font-bold text-lg animate-pulse">Syncing Database...</p>
+                        <div className="flex flex-col items-center justify-center py-16 sm:py-24">
+                            <Clock className="mx-auto mb-4 text-indigo-400 animate-spin" size={40} />
+                            <p className="text-slate-500 font-bold">Loading ledger history...</p>
                         </div>
                     ) : globalHistoryData.length === 0 ? (
-                        <div className="text-center py-20 bg-white rounded-3xl border border-slate-200 shadow-sm w-full max-w-2xl mx-auto">
-                            <FileText className="mx-auto mb-4 text-slate-300" size={48} />
-                            <p className="text-slate-500 font-bold text-lg">No billing history found.</p>
+                        <div className="text-center py-16 sm:py-24 bg-white rounded-2xl sm:rounded-3xl border border-slate-200 shadow-sm max-w-md mx-auto">
+                            <FileText className="mx-auto mb-3 text-slate-300" size={48} />
+                            <p className="text-slate-500 font-bold text-base sm:text-lg">No billing history found.</p>
+                            <button 
+                                onClick={() => setCurrentView('dashboard')}
+                                className="mt-4 text-indigo-600 text-sm font-semibold underline"
+                            >
+                                ← Back to Dashboard
+                            </button>
                         </div>
                     ) : (
-                        globalHistoryData.map((data, idx) => {
-                            const isExpanded = expandedMonth === data.month;
-                            
-                            let displayedPayments = data.payments;
-                            if (isExpanded && monthSearchTerm) {
-                                displayedPayments = data.payments.filter(p => 
-                                    p.customerId?.name?.toLowerCase().includes(monthSearchTerm.toLowerCase()) ||
-                                    p.customerId?.phone?.includes(monthSearchTerm)
-                                );
-                            }
+                        <div className="flex flex-col gap-4 sm:gap-6 w-full max-w-6xl mx-auto">
+                            {globalHistoryData.map((data, idx) => {
+                                const isExpanded = expandedMonth === data.month;
+                                
+                                let displayedPayments = data.payments;
+                                if (isExpanded && monthSearchTerm) {
+                                    displayedPayments = data.payments.filter(p => 
+                                        p.customerId?.name?.toLowerCase().includes(monthSearchTerm.toLowerCase()) ||
+                                        p.customerId?.phone?.includes(monthSearchTerm)
+                                    );
+                                }
 
-                            return (
-                                <div key={idx} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col w-full transition-all duration-200">
-                                    <button 
-                                        onClick={() => {
-                                            setExpandedMonth(isExpanded ? null : data.month);
-                                            setMonthSearchTerm(''); 
-                                        }}
-                                        className="w-full text-left bg-indigo-50/30 hover:bg-indigo-50/60 border-b border-slate-200 p-4 sm:p-5 lg:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-colors"
-                                    >
-                                        <div className="flex items-center gap-4">
-                                            <div className="bg-white p-3 rounded-2xl shadow-sm border border-indigo-100 text-indigo-600 hidden sm:block">
-                                                <CalendarDays size={24} strokeWidth={2} />
-                                            </div>
-                                            <div>
-                                                <h2 className="text-xl sm:text-2xl font-black text-indigo-900">{data.month}</h2>
-                                                <p className="text-xs font-bold text-indigo-600 uppercase tracking-wider mt-1">{data.payments.length} Customers Billed</p>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex items-center justify-between md:justify-end w-full md:w-auto gap-4 sm:gap-6">
-                                            <div className="flex gap-4 bg-white p-2.5 sm:p-3 rounded-xl border border-indigo-100 shadow-sm">
-                                                <div className="flex flex-col">
-                                                    <span className="text-[10px] font-extrabold text-emerald-600 uppercase tracking-widest">Collected</span>
-                                                    <span className="font-black text-slate-900 text-sm sm:text-base">₹{data.collected}</span>
-                                                </div>
-                                                <div className="w-px bg-slate-200"></div>
-                                                <div className="flex flex-col">
-                                                    <span className="text-[10px] font-extrabold text-rose-600 uppercase tracking-widest">Pending</span>
-                                                    <span className="font-black text-slate-900 text-sm sm:text-base">₹{data.pending}</span>
-                                                </div>
-                                            </div>
-                                            <div className={`p-2 rounded-xl transition-colors ${isExpanded ? 'bg-indigo-600 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-400'}`}>
-                                                {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-                                            </div>
-                                        </div>
-                                    </button>
-
-                                    {isExpanded && (
-                                        <div className="w-full overflow-x-auto bg-white animate-in slide-in-from-top-2 duration-200">
-                                            <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50/50">
-                                                <span className="text-sm font-bold text-slate-600">Showing {displayedPayments.length} records</span>
-                                                <div className="relative w-full sm:w-72">
-                                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                                        <Search className="h-4 w-4 text-slate-400" />
+                                return (
+                                    <div key={idx} className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-slate-200 overflow-hidden transition-all duration-200">
+                                        {/* Month Header - Accordion Button */}
+                                        <button 
+                                            onClick={() => {
+                                                setExpandedMonth(isExpanded ? null : data.month);
+                                                setMonthSearchTerm(''); 
+                                            }}
+                                            className="w-full text-left bg-gradient-to-r from-indigo-50/30 to-white hover:bg-indigo-50/50 p-4 sm:p-5 flex flex-col gap-3 transition-all"
+                                        >
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-3 sm:gap-4">
+                                                    <div className="bg-white p-2 sm:p-3 rounded-xl shadow-sm border border-indigo-100 text-indigo-600">
+                                                        <CalendarDays size={18} className="sm:w-6 sm:h-6" />
                                                     </div>
-                                                    <input 
-                                                        type="text" 
-                                                        placeholder={`Search in ${data.month}...`}
-                                                        value={monthSearchTerm} 
-                                                        onChange={(e) => setMonthSearchTerm(e.target.value)} 
-                                                        className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all bg-white shadow-sm" 
-                                                    />
+                                                    <div className="text-left">
+                                                        <h2 className="text-lg sm:text-2xl font-black text-indigo-900">{data.month}</h2>
+                                                        <p className="text-[10px] sm:text-xs font-bold text-indigo-600">{data.payments.length} Customers Billed</p>
+                                                    </div>
+                                                </div>
+                                                <div className={`p-1.5 sm:p-2 rounded-xl transition-all ${isExpanded ? 'bg-indigo-600 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-400'}`}>
+                                                    {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                                                 </div>
                                             </div>
+                                            
+                                            {/* Stats Row - visible even when collapsed */}
+                                            <div className="flex gap-3 sm:gap-4 ml-12 sm:ml-16">
+                                                <div className="flex items-center gap-2 bg-emerald-50 px-3 py-1.5 rounded-lg">
+                                                    <CheckCircle2 size={14} className="text-emerald-600" />
+                                                    <span className="text-xs font-bold text-emerald-700">₹{data.collected}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2 bg-rose-50 px-3 py-1.5 rounded-lg">
+                                                    <Clock size={14} className="text-rose-600" />
+                                                    <span className="text-xs font-bold text-rose-700">₹{data.pending}</span>
+                                                </div>
+                                            </div>
+                                        </button>
 
-                                            <table className="w-full text-left border-collapse whitespace-nowrap">
-                                                <thead>
-                                                    <tr className="bg-slate-50 border-b border-slate-200">
-                                                        <th className="px-6 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Customer Name</th>
-                                                        <th className="px-6 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Phone</th>
-                                                        <th className="px-6 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
-                                                        <th className="px-6 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center">Missed Days</th>
-                                                        <th className="px-6 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right">Final Amount</th>
-                                                        <th className="px-6 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right">Paid Date</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-slate-100">
+                                        {/* Expanded Content */}
+                                        {isExpanded && (
+                                            <div className="border-t border-slate-100 animate-in slide-in-from-top-2 duration-200">
+                                                {/* Search Bar */}
+                                                <div className="p-3 sm:p-4 bg-slate-50/80 border-b border-slate-100">
+                                                    <div className="relative w-full">
+                                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                                        <input 
+                                                            type="text" 
+                                                            placeholder={`Search in ${data.month}...`}
+                                                            value={monthSearchTerm} 
+                                                            onChange={(e) => setMonthSearchTerm(e.target.value)} 
+                                                            className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-all bg-white" 
+                                                        />
+                                                    </div>
+                                                    <p className="text-xs text-slate-500 mt-2 ml-1">Showing {displayedPayments.length} of {data.payments.length} records</p>
+                                                </div>
+
+                                                {/* Mobile Card View (xs to md) */}
+                                                <div className="md:hidden p-3 space-y-3">
                                                     {displayedPayments.length === 0 ? (
-                                                        <tr>
-                                                            <td colSpan="6" className="px-6 py-8 text-center text-slate-500 font-medium">
-                                                                No customers match your search in {data.month}.
-                                                            </td>
-                                                        </tr>
+                                                        <div className="text-center py-8 text-slate-500 text-sm">
+                                                            No customers match your search in {data.month}.
+                                                        </div>
                                                     ) : (
                                                         displayedPayments.map((p, i) => (
-                                                            <tr key={i} className="hover:bg-slate-50/50 transition-colors">
-                                                                <td className="px-6 py-4 font-bold text-slate-900 text-sm">{p.customerId?.name || 'Unknown'}</td>
-                                                                <td className="px-6 py-4 text-xs text-slate-600 font-medium">{p.customerId?.phone ? `+91 ${p.customerId.phone}` : ''}</td>
-                                                                <td className="px-6 py-4">
-                                                                    <StatusBadge status={p.status} />
-                                                                </td>
-                                                                <td className="px-6 py-4 text-center">
-                                                                    {p.missedDays > 0 ? (
-                                                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-rose-50 text-rose-600 border border-rose-100">
-                                                                            {p.missedDays} Days
-                                                                        </span>
-                                                                    ) : (
-                                                                        <span className="text-slate-300 text-sm font-bold">-</span>
-                                                                    )}
-                                                                </td>
-                                                                <td className="px-6 py-4 text-right font-black text-slate-900">
-                                                                    ₹{p.amount}
-                                                                </td>
-                                                                <td className="px-6 py-4 text-right">
-                                                                    {p.paidDate ? (
-                                                                        <span className="text-xs font-bold text-slate-500">{p.paidDate}</span>
-                                                                    ) : (
-                                                                        <span className="text-xs font-bold text-rose-400">Unpaid</span>
-                                                                    )}
-                                                                </td>
-                                                            </tr>
+                                                            <div key={i} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                                                                <div className="flex justify-between items-start mb-3">
+                                                                    <div className="flex-1">
+                                                                        <h3 className="font-bold text-slate-800 text-base">{p.customerId?.name || 'Unknown'}</h3>
+                                                                        <p className="text-slate-500 text-xs mt-0.5">📞 +91 {p.customerId?.phone || ''}</p>
+                                                                    </div>
+                                                                    <div className="text-right">
+                                                                        <p className="font-black text-indigo-700 text-lg">₹{p.amount}</p>
+                                                                        <div className="mt-1">
+                                                                            {p.status === 'Paid' ? (
+                                                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">Paid</span>
+                                                                            ) : p.status === 'Pending' ? (
+                                                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700">Pending</span>
+                                                                            ) : (
+                                                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">No Record</span>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex justify-between items-center pt-3 border-t border-slate-100">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="text-slate-500 text-xs">Missed:</span>
+                                                                        {p.missedDays > 0 ? (
+                                                                            <span className="bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full text-[11px] font-bold">{p.missedDays} days</span>
+                                                                        ) : (
+                                                                            <span className="text-slate-300 text-xs">—</span>
+                                                                        )}
+                                                                    </div>
+                                                                    <div>
+                                                                        {p.paidDate ? (
+                                                                            <span className="text-emerald-600 text-xs font-semibold">✅ {p.paidDate}</span>
+                                                                        ) : (
+                                                                            <span className="text-rose-500 text-xs font-semibold">⏳ Unpaid</span>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
                                                         ))
                                                     )}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })
+                                                </div>
+
+                                                {/* Desktop Table View (md and up) */}
+                                                <div className="hidden md:block overflow-x-auto">
+                                                    <table className="w-full text-left border-collapse min-w-[700px]">
+                                                        <thead className="bg-slate-50">
+                                                            <tr className="border-b border-slate-200">
+                                                                <th className="px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Customer Name</th>
+                                                                <th className="px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Phone</th>
+                                                                <th className="px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                                                                <th className="px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center">Missed Days</th>
+                                                                <th className="px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right">Final Amount</th>
+                                                                <th className="px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right">Paid Date</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-slate-100">
+                                                            {displayedPayments.length === 0 ? (
+                                                                <tr>
+                                                                    <td colSpan="6" className="px-5 py-10 text-center text-slate-500 font-medium">
+                                                                        No customers match your search in {data.month}.
+                                                                    </td>
+                                                                </tr>
+                                                            ) : (
+                                                                displayedPayments.map((p, i) => (
+                                                                    <tr key={i} className="hover:bg-slate-50/60 transition-colors">
+                                                                        <td className="px-5 py-3.5 font-bold text-slate-800 text-sm">{p.customerId?.name || 'Unknown'}</td>
+                                                                        <td className="px-5 py-3.5 text-slate-600 text-xs font-mono">+91 {p.customerId?.phone || ''}</td>
+                                                                        <td className="px-5 py-3.5">
+                                                                            {p.status === 'Paid' ? (
+                                                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">Paid</span>
+                                                                            ) : p.status === 'Pending' ? (
+                                                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700">Pending</span>
+                                                                            ) : (
+                                                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">No Record</span>
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="px-5 py-3.5 text-center">
+                                                                            {p.missedDays > 0 ? (
+                                                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700">
+                                                                                    {p.missedDays} Days
+                                                                                </span>
+                                                                            ) : (
+                                                                                <span className="text-slate-300 text-sm">-</span>
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="px-5 py-3.5 text-right font-black text-slate-900">₹{p.amount}</td>
+                                                                        <td className="px-5 py-3.5 text-right text-xs font-semibold">
+                                                                            {p.paidDate ? (
+                                                                                <span className="text-slate-600">{p.paidDate}</span>
+                                                                            ) : (
+                                                                                <span className="text-rose-500">Unpaid</span>
+                                                                            )}
+                                                                        </td>
+                                                                    </tr>
+                                                                ))
+                                                            )}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
                     )}
                 </div>
             </div>
@@ -532,47 +606,45 @@ const Dashboard = () => {
     // RENDER: MAIN DASHBOARD VIEW
     // ==========================================
     return (
-        <div className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8 font-sans relative w-full overflow-hidden animate-in fade-in duration-300 flex flex-col">
+        <div className="min-h-screen bg-slate-50 p-3 sm:p-5 lg:p-8 font-sans relative w-full flex flex-col">
             
-            {/* --- CUSTOM ANIMATED TOAST NOTIFICATION --- */}
-            <div className={`fixed top-6 right-6 z-[70] transition-all duration-500 ease-out transform ${toast.show ? 'translate-x-0 opacity-100' : 'translate-x-32 opacity-0 pointer-events-none'}`}>
-                <div className={`flex items-center gap-3 px-5 py-4 rounded-2xl shadow-xl border ${toast.type === 'error' ? 'bg-white border-rose-200' : 'bg-white border-emerald-200'}`}>
+            {/* Toast Notification */}
+            <div className={`fixed top-4 right-4 z-[70] transition-all duration-500 ease-out transform ${toast.show ? 'translate-x-0 opacity-100' : 'translate-x-32 opacity-0 pointer-events-none'}`}>
+                <div className={`flex items-center gap-2 sm:gap-3 px-3 py-2.5 sm:px-5 sm:py-4 rounded-xl sm:rounded-2xl shadow-xl border ${toast.type === 'error' ? 'bg-white border-rose-200' : 'bg-white border-emerald-200'}`}>
                     {toast.type === 'error' ? (
-                        <div className="bg-rose-100 p-2 rounded-full text-rose-600 animate-pulse"><XCircle size={20} /></div>
+                        <div className="bg-rose-100 p-1.5 sm:p-2 rounded-full text-rose-600"><XCircle size={16} className="sm:w-5 sm:h-5" /></div>
                     ) : (
-                        <div className="bg-emerald-100 p-2 rounded-full text-emerald-600"><CheckCircle2 size={20} /></div>
+                        <div className="bg-emerald-100 p-1.5 sm:p-2 rounded-full text-emerald-600"><CheckCircle2 size={16} className="sm:w-5 sm:h-5" /></div>
                     )}
-                    <p className={`text-sm font-bold ${toast.type === 'error' ? 'text-rose-900' : 'text-emerald-900'}`}>{toast.message}</p>
+                    <p className={`text-xs sm:text-sm font-bold ${toast.type === 'error' ? 'text-rose-900' : 'text-emerald-900'}`}>{toast.message}</p>
                 </div>
             </div>
 
-            {/* --- CUSTOM CONFIRMATION MODAL --- */}
+            {/* Confirmation Modal */}
             {confirmDialog.isOpen && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-0 bg-slate-900/60 backdrop-blur-md transition-opacity animate-in fade-in duration-200">
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col transform transition-all animate-in zoom-in-95 duration-200">
-                        <div className="p-6">
-                            <div className={`mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full mb-4 ${confirmDialog.type === 'danger' ? 'bg-rose-100' : 'bg-blue-100'}`}>
-                                {confirmDialog.type === 'danger' ? <AlertTriangle className="h-6 w-6 text-rose-600" /> : <CalendarDays className="h-6 w-6 text-blue-600" />}
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-[90%] sm:max-w-sm overflow-hidden">
+                        <div className="p-5 sm:p-6">
+                            <div className={`mx-auto flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-full mb-3 sm:mb-4 ${confirmDialog.type === 'danger' ? 'bg-rose-100' : 'bg-blue-100'}`}>
+                                {confirmDialog.type === 'danger' ? <AlertTriangle className="h-5 w-5 sm:h-6 sm:w-6 text-rose-600" /> : <CalendarDays className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />}
                             </div>
-                            <div className="mt-3 text-center">
-                                <h3 className="text-lg font-bold leading-6 text-slate-900">{confirmDialog.title}</h3>
-                                <div className="mt-2">
-                                    <p className="text-sm text-slate-500">{confirmDialog.message}</p>
-                                </div>
+                            <div className="text-center">
+                                <h3 className="text-base sm:text-lg font-bold text-slate-900">{confirmDialog.title}</h3>
+                                <p className="text-xs sm:text-sm text-slate-500 mt-2">{confirmDialog.message}</p>
                             </div>
                         </div>
-                        <div className="bg-slate-50 px-4 py-4 sm:flex sm:flex-row-reverse sm:px-6 border-t border-slate-100 gap-2">
-                            <button
-                                onClick={confirmDialog.onConfirm}
-                                className={`inline-flex w-full justify-center rounded-xl px-4 py-2.5 text-sm font-bold text-white shadow-sm sm:w-auto transition-all active:scale-95 ${confirmDialog.type === 'danger' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-blue-600 hover:bg-blue-700'}`}
-                            >
-                                Confirm
-                            </button>
+                        <div className="bg-slate-50 px-4 py-3 sm:px-6 sm:py-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
                             <button
                                 onClick={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}
-                                className="mt-3 inline-flex w-full justify-center rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50 sm:mt-0 sm:w-auto transition-all"
+                                className="px-4 py-2 text-sm font-bold text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition-all"
                             >
                                 Cancel
+                            </button>
+                            <button
+                                onClick={confirmDialog.onConfirm}
+                                className={`px-4 py-2 text-sm font-bold text-white rounded-xl transition-all ${confirmDialog.type === 'danger' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+                            >
+                                Confirm
                             </button>
                         </div>
                     </div>
@@ -580,65 +652,61 @@ const Dashboard = () => {
             )}
 
             {/* Header */}
-            <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 lg:mb-8 gap-4 lg:gap-6 w-full shrink-0">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-5 lg:mb-8 gap-4">
                 <div>
                     <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
-                        <span className="text-blue-600 text-3xl">🚗</span> AutoFlow
+                        <span className="text-blue-600 text-2xl sm:text-3xl">🚗</span> AutoFlow
                     </h1>
-                    <p className="text-sm sm:text-base text-slate-500 mt-1">Monthly Subscription & Payment Tracker</p>
+                    <p className="text-xs sm:text-sm text-slate-500 mt-0.5">Monthly Subscription & Payment Tracker</p>
                 </div>
 
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full xl:w-auto">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
+                    {/* Month Selector */}
                     <div className="relative w-full sm:w-auto" ref={dropdownRef}>
                         <button
                             onClick={() => setIsMonthDropdownOpen(!isMonthDropdownOpen)}
-                            className="w-full sm:w-64 bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 px-4 py-2.5 rounded-xl font-bold shadow-sm transition-all flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                            className="w-full sm:w-56 bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 px-3 py-2.5 rounded-xl font-bold shadow-sm transition-all flex items-center justify-between"
                         >
-                            <div className="flex items-center gap-3">
-                                <CalendarDays size={18} className="text-blue-600" />
+                            <div className="flex items-center gap-2">
+                                <CalendarDays size={16} className="text-blue-600" />
                                 <div className="flex flex-col items-start leading-tight">
-                                    <span className="text-[10px] uppercase text-slate-500 font-semibold tracking-wider">Viewing</span>
-                                    <span>{selectedMonth}</span>
+                                    <span className="text-[9px] uppercase text-slate-500 font-semibold">Viewing</span>
+                                    <span className="text-sm">{selectedMonth}</span>
                                 </div>
                             </div>
-                            <ChevronDown size={16} className={`text-slate-400 transition-transform ${isMonthDropdownOpen ? 'rotate-180' : ''}`} />
+                            <ChevronDown size={14} className={`text-slate-400 transition-transform ${isMonthDropdownOpen ? 'rotate-180' : ''}`} />
                         </button>
 
                         {isMonthDropdownOpen && (
-                            <div className="absolute right-0 mt-2 w-full sm:w-72 bg-white border border-slate-200 rounded-xl shadow-xl z-30 flex flex-col overflow-hidden transform origin-top transition-all duration-200 animate-in fade-in zoom-in-95">
-                                <div className="p-3 border-b border-slate-100 bg-blue-50/50">
-                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Initialize Billing</p>
-                                    <button
-                                        onClick={confirmStartMonth}
-                                        className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-sm active:scale-95"
-                                    >
-                                        <Plus size={16} strokeWidth={3} /> Start {selectedMonth}
-                                    </button>
-                                </div>
-
-                                <div className="max-h-64 overflow-y-auto py-2">
-                                    <p className="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Switch View</p>
+                            <div className="absolute right-0 mt-2 w-full sm:w-72 bg-white border border-slate-200 rounded-xl shadow-xl z-30 overflow-hidden">
+                                {initializedMonths.includes(selectedMonth) ? (
+                                    <div className="p-3 bg-gradient-to-r from-emerald-50 to-emerald-100/30 text-center">
+                                        <div className="bg-emerald-500 text-white p-2 rounded-full inline-flex mb-1">
+                                            <CheckCircle2 size={16} />
+                                        </div>
+                                        <p className="text-xs font-black text-emerald-800">✅ Billing Activated</p>
+                                    </div>
+                                ) : (
+                                    <div className="p-3 bg-gradient-to-r from-amber-50 to-amber-100/30">
+                                        <button onClick={confirmStartMonth} className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2">
+                                            <Plus size={14} /> Initialize {selectedMonth}
+                                        </button>
+                                    </div>
+                                )}
+                                <div className="max-h-56 overflow-y-auto py-1">
                                     {availableMonths.map((month) => {
                                         const isActivated = initializedMonths.includes(month);
                                         return (
                                             <button
                                                 key={month}
-                                                onClick={() => {
-                                                    setSelectedMonth(month);
-                                                    setIsMonthDropdownOpen(false);
-                                                }}
-                                                className={`w-full flex items-center justify-between px-4 py-3 text-sm transition-colors ${selectedMonth === month
-                                                    ? 'bg-blue-50 text-blue-900 font-bold border-l-4 border-blue-600'
-                                                    : 'text-slate-700 hover:bg-slate-50 border-l-4 border-transparent'
-                                                    }`}
+                                                onClick={() => { setSelectedMonth(month); setIsMonthDropdownOpen(false); }}
+                                                className={`w-full flex items-center justify-between px-3 py-2.5 text-sm transition-all ${selectedMonth === month ? 'bg-blue-50 text-blue-900 font-bold' : 'text-slate-700 hover:bg-slate-50'}`}
                                             >
-                                                <div className="flex items-center gap-2">
-                                                    {month}
-                                                </div>
+                                                <span>{month}</span>
                                                 {isActivated ? (
-                                                    <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 uppercase tracking-wider">Activated</span>
+                                                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Active</span>
                                                 ) : (
-                                                    <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-500 uppercase tracking-wider">Not Activated</span>
+                                                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">Inactive</span>
                                                 )}
                                             </button>
                                         );
@@ -648,171 +716,116 @@ const Dashboard = () => {
                         )}
                     </div>
 
-                    <button onClick={navigateToGlobalHistory} className="bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-xl font-medium shadow-md transition-all active:scale-95 flex items-center justify-center gap-2">
-                        <Database size={18} strokeWidth={2.5} /> Global History
+                    <button onClick={navigateToGlobalHistory} className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2.5 rounded-xl font-medium transition-all active:scale-95 flex items-center justify-center gap-2 text-sm">
+                        <Database size={16} /> Global History
                     </button>
 
-                    <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-medium shadow-md shadow-blue-600/20 transition-all active:scale-95 flex items-center justify-center gap-2">
-                        <Users size={18} strokeWidth={2.5} /> Add Customer
+                    <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-medium shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 text-sm">
+                        <Users size={16} /> Add Customer
                     </button>
                 </div>
             </div>
 
-            {/* Financial Stats Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-6 mb-6 lg:mb-8 w-full shrink-0">
-                <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-center transition-all hover:shadow-md">
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="bg-blue-50 p-2 rounded-lg text-blue-600"><Users size={18} /></div>
-                        <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Customers</h2>
+            {/* Stats Grid */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6 mb-5 lg:mb-8">
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <div className="flex items-center gap-2 mb-1">
+                        <div className="bg-blue-50 p-1.5 rounded-lg text-blue-600"><Users size={14} /></div>
+                        <h2 className="text-[10px] font-bold text-slate-500 uppercase">Customers</h2>
                     </div>
-                    <p className="text-2xl sm:text-3xl font-extrabold text-slate-900">{totalCustomers}</p>
+                    <p className="text-xl sm:text-2xl font-extrabold text-slate-900">{totalCustomers}</p>
                 </div>
-
-                <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-center transition-all hover:shadow-md">
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="bg-slate-50 p-2 rounded-lg text-slate-600"><IndianRupee size={18} /></div>
-                        <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Expected</h2>
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <div className="flex items-center gap-2 mb-1">
+                        <div className="bg-slate-50 p-1.5 rounded-lg text-slate-600"><IndianRupee size={14} /></div>
+                        <h2 className="text-[10px] font-bold text-slate-500 uppercase">Expected</h2>
                     </div>
-                    <p className="text-2xl sm:text-3xl font-extrabold text-slate-900">₹{expectedRevenue}</p>
+                    <p className="text-xl sm:text-2xl font-extrabold text-slate-900">₹{expectedRevenue}</p>
                 </div>
-
-                <div className="bg-white p-5 rounded-2xl shadow-sm border border-emerald-100 flex flex-col justify-center relative overflow-hidden transition-all hover:shadow-md">
-                    <div className="absolute top-0 right-0 p-4 opacity-10"><CheckCircle2 size={64} className="text-emerald-500" /></div>
-                    <div className="flex items-center gap-3 mb-2 relative z-10">
-                        <div className="bg-emerald-50 p-2 rounded-lg text-emerald-600"><CheckCircle2 size={18} /></div>
-                        <h2 className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">Collected</h2>
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-emerald-100 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-2 opacity-5"><CheckCircle2 size={40} /></div>
+                    <div className="flex items-center gap-2 mb-1 relative">
+                        <div className="bg-emerald-50 p-1.5 rounded-lg text-emerald-600"><CheckCircle2 size={14} /></div>
+                        <h2 className="text-[10px] font-bold text-emerald-700 uppercase">Collected</h2>
                     </div>
-                    <p className="text-2xl sm:text-3xl font-extrabold text-emerald-700 relative z-10">₹{collectedRevenue}</p>
+                    <p className="text-xl sm:text-2xl font-extrabold text-emerald-700 relative">₹{collectedRevenue}</p>
                 </div>
-
-                <div className="bg-white p-5 rounded-2xl shadow-sm border border-rose-100 flex flex-col justify-center relative overflow-hidden transition-all hover:shadow-md">
-                    <div className="absolute top-0 right-0 p-4 opacity-10"><AlertCircle size={64} className="text-rose-500" /></div>
-                    <div className="flex items-center gap-3 mb-2 relative z-10">
-                        <div className="bg-rose-50 p-2 rounded-lg text-rose-600"><Clock size={18} /></div>
-                        <h2 className="text-[11px] font-bold text-rose-700 uppercase tracking-wider">Pending</h2>
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-rose-100 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-2 opacity-5"><AlertCircle size={40} /></div>
+                    <div className="flex items-center gap-2 mb-1 relative">
+                        <div className="bg-rose-50 p-1.5 rounded-lg text-rose-600"><Clock size={14} /></div>
+                        <h2 className="text-[10px] font-bold text-rose-700 uppercase">Pending</h2>
                     </div>
-                    <p className="text-2xl sm:text-3xl font-extrabold text-rose-600 relative z-10">₹{pendingDues}</p>
+                    <p className="text-xl sm:text-2xl font-extrabold text-rose-600 relative">₹{pendingDues}</p>
                 </div>
             </div>
 
-            {/* Main Content Area */}
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 w-full overflow-hidden flex flex-col flex-1">
-                <div className="px-4 sm:px-6 py-4 border-b border-slate-100 flex flex-col md:flex-row md:justify-between md:items-center bg-slate-50/50 gap-4 shrink-0">
-                    <h2 className="text-lg font-bold text-slate-900">Active Subscriptions</h2>
-                    <div className="relative w-full md:w-72">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <Search className="h-4 w-4 text-slate-400" />
-                        </div>
-                        <input type="text" placeholder="Search by name..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" />
+            {/* Main Table/Card Area */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 w-full overflow-hidden flex flex-col flex-1">
+                <div className="px-4 py-3 border-b border-slate-100 flex flex-col sm:flex-row sm:justify-between sm:items-center bg-slate-50/50 gap-3">
+                    <h2 className="text-base font-bold text-slate-900">Active Subscriptions</h2>
+                    <div className="relative w-full sm:w-64">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                        <input type="text" placeholder="Search by name..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
                     </div>
                 </div>
 
                 {filteredCustomers.length === 0 ? (
-                    <div className="p-8 sm:p-12 flex flex-col items-center justify-center text-center w-full h-full min-h-[300px]">
-                        <div className="bg-slate-100 p-5 rounded-full mb-4 text-slate-400"><Users size={36} strokeWidth={1.5} /></div>
-                        <h3 className="text-slate-900 font-bold text-lg sm:text-xl mb-2">No customers found</h3>
-                        <p className="text-slate-500 text-sm sm:text-base max-w-sm mb-6 leading-relaxed">
-                            {searchTerm ? "No customers match your search criteria." : "Add your first car cleaning customer to start tracking monthly payments."}
-                        </p>
+                    <div className="p-8 sm:p-12 flex flex-col items-center justify-center text-center">
+                        <div className="bg-slate-100 p-4 rounded-full mb-3 text-slate-400"><Users size={28} /></div>
+                        <h3 className="text-slate-900 font-bold text-base mb-1">No customers found</h3>
+                        <p className="text-slate-500 text-sm">Add a customer to start tracking</p>
                     </div>
                 ) : (
-                    <div className="w-full flex-1 overflow-auto">
-                        {/* RESPONSIVE CARD GRID VIEW (Mobile & Tablet) */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:hidden gap-4 p-4 sm:p-6 bg-slate-50/50 w-full h-full">
+                    <>
+                        {/* Mobile Card Grid */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:hidden gap-3 p-4 bg-slate-50/50">
                             {filteredCustomers.map((c) => {
                                 const todayStatus = getTodayStatus(c.dailyStatus);
                                 const hasActionToday = todayStatus === 'Cleaned' || todayStatus === 'Missed';
-
                                 return (
-                                    <div key={c._id} className="p-5 bg-white rounded-2xl shadow-sm border border-slate-200 hover:border-blue-200 transition-all w-full group">
-                                        <div className="flex justify-between items-start mb-4">
-                                            <div className="truncate pr-2">
-                                                <h3 className="font-bold text-slate-900 text-lg flex items-center gap-1 truncate">
-                                                    <span className="truncate">{c.name}</span>
-                                                    <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-md ml-1 shrink-0">
-                                                        {c.gender?.charAt(0).toUpperCase() || 'M'}
-                                                    </span>
-                                                </h3>
-                                                <p className="text-slate-500 text-sm mt-0.5 truncate">+91 {c.phone}</p>
+                                    <div key={c._id} className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+                                        <div className="flex justify-between items-start mb-3">
+                                            <div className="flex-1 min-w-0">
+                                                <h3 className="font-bold text-slate-900 text-base truncate">{c.name}</h3>
+                                                <p className="text-slate-500 text-xs mt-0.5">+91 {c.phone}</p>
                                             </div>
-                                            <div className="text-right flex flex-col items-end gap-1.5 shrink-0">
-                                                <div className="font-black text-slate-900 text-lg">₹{c.amount || c.monthlyAmount}</div>
+                                            <div className="text-right shrink-0 ml-2">
+                                                <p className="font-black text-slate-900">₹{c.amount || c.monthlyAmount}</p>
                                                 <StatusBadge status={c.status} />
                                             </div>
                                         </div>
-
                                         {c.paymentId && (
-                                            <div className="mb-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                                                <div className="flex justify-between items-start mb-2">
-                                                    <span className="text-[11px] font-bold text-slate-500 uppercase">Today's Status</span>
-                                                    {c.missedDays > 0 && (
-                                                        <div className="text-right flex flex-col items-end">
-                                                            <span className="text-[11px] text-rose-500 font-bold bg-rose-50 px-2 py-0.5 rounded-md border border-rose-100">
-                                                                Missed: {c.missedDays}
-                                                            </span>
-                                                            <span className="text-[9px] text-slate-400 font-medium mt-1 max-w-[120px] leading-tight text-right">
-                                                                {c.dailyStatus
-                                                                    ?.filter(d => d.status === 'Missed')
-                                                                    .map(d => new Date(d.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }))
-                                                                    .join(', ')}
-                                                            </span>
-                                                        </div>
-                                                    )}
+                                            <div className="mb-3 bg-slate-50 p-2 rounded-lg">
+                                                <div className="flex justify-between text-xs mb-2">
+                                                    <span className="font-bold text-slate-500">Today</span>
+                                                    {c.missedDays > 0 && <span className="text-rose-500 font-bold">Missed: {c.missedDays}</span>}
                                                 </div>
-
                                                 {hasActionToday ? (
-                                                    <div className="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-slate-200">
-                                                        <span className={`text-xs font-bold ${todayStatus === 'Cleaned' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                                            {todayStatus === 'Cleaned' ? '✨ Cleaned' : '❌ Missed'}
-                                                        </span>
-                                                        <button
-                                                            onClick={() => updateDailyStatus(c.paymentId, "None")}
-                                                            className="text-slate-400 hover:text-rose-600 p-1 bg-slate-50 hover:bg-rose-50 rounded-md transition-colors flex items-center gap-1 text-[11px] font-semibold"
-                                                        >
-                                                            <Trash2 size={12} /> Undo
-                                                        </button>
+                                                    <div className="flex justify-between items-center">
+                                                        <span className={`text-xs font-bold ${todayStatus === 'Cleaned' ? 'text-emerald-600' : 'text-rose-600'}`}>{todayStatus}</span>
+                                                        <button onClick={() => updateDailyStatus(c.paymentId, "None")} className="text-slate-400 text-xs">Undo</button>
                                                     </div>
                                                 ) : (
                                                     <div className="flex gap-2">
-                                                        <button onClick={() => updateDailyStatus(c.paymentId, "Cleaned")} className="flex-1 px-2 py-2 bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition-all border border-emerald-200 active:scale-95">
-                                                            <Check size={14} /> Clean
-                                                        </button>
-                                                        <button onClick={() => updateDailyStatus(c.paymentId, "Missed")} className="flex-1 px-2 py-2 bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition-all border border-rose-200 active:scale-95">
-                                                            <XCircle size={14} /> Miss
-                                                        </button>
+                                                        <button onClick={() => updateDailyStatus(c.paymentId, "Cleaned")} className="flex-1 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-bold">Clean</button>
+                                                        <button onClick={() => updateDailyStatus(c.paymentId, "Missed")} className="flex-1 py-1.5 bg-rose-50 text-rose-700 rounded-lg text-xs font-bold">Miss</button>
                                                     </div>
                                                 )}
                                             </div>
                                         )}
-
-                                        <div className="pt-4 border-t border-slate-100 flex flex-wrap gap-2 justify-between items-center">
-                                            <div className="flex flex-wrap gap-2 flex-1">
-                                                {c.paymentId && (
-                                                    <button onClick={() => togglePaymentStatus(c.paymentId)} className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all flex-1 text-center active:scale-95 ${c.status === 'Pending' ? 'bg-slate-100 text-slate-700 hover:bg-emerald-100 hover:text-emerald-700' : 'bg-slate-100 text-slate-700 hover:bg-rose-100 hover:text-rose-700'}`}>
-                                                        {c.status === 'Pending' ? 'Mark Paid' : 'Mark Pending'}
-                                                    </button>
-                                                )}
-
-                                                {c.status === 'Pending' || c.status === 'No Record' ? (
-                                                    <>
-                                                        <button onClick={() => handleSendWhatsApp(c, 'request')} className="flex items-center justify-center gap-1 px-2 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-[11px] font-bold flex-1 active:scale-95 transition-all">
-                                                            <MessageCircle size={12} /> Bill
-                                                        </button>
-                                                        <button onClick={() => handleSendWhatsApp(c, 'reminder')} className="flex items-center justify-center gap-1 px-2 py-1.5 bg-rose-50 text-rose-700 rounded-lg text-[11px] font-bold flex-1 active:scale-95 transition-all">
-                                                            <AlertCircle size={12} /> Nudge
-                                                        </button>
-                                                    </>
-                                                ) : (
-                                                    <button onClick={() => handleSendWhatsApp(c, 'thankyou')} className="flex items-center justify-center gap-1 px-2 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-[11px] font-bold flex-1 active:scale-95 transition-all">
-                                                        <MessageCircle size={12} /> Thanks
-                                                    </button>
-                                                )}
-                                            </div>
-
-                                            <div className="flex items-center gap-0.5 ml-1 pl-1 border-l border-slate-200">
-                                                <button onClick={() => openHistory(c)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><History size={14} /></button>
-                                                <button onClick={() => handleEdit(c)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Edit size={14} /></button>
-                                                <button onClick={() => confirmDelete(c._id)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"><Trash2 size={14} /></button>
+                                        <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
+                                            {c.paymentId && (
+                                                <button onClick={() => togglePaymentStatus(c.paymentId)} className={`px-2 py-1 rounded-lg text-[10px] font-bold ${c.status === 'Pending' ? 'bg-slate-100 hover:bg-emerald-100' : 'bg-slate-100 hover:bg-rose-100'}`}>
+                                                    {c.status === 'Pending' ? 'Mark Paid' : 'Mark Pending'}
+                                                </button>
+                                            )}
+                                            <button onClick={() => handleSendWhatsApp(c, 'request')} className="px-2 py-1 bg-emerald-50 text-emerald-700 rounded-lg text-[10px] font-bold">Bill</button>
+                                            <button onClick={() => handleSendWhatsApp(c, 'reminder')} className="px-2 py-1 bg-rose-50 text-rose-700 rounded-lg text-[10px] font-bold">Nudge</button>
+                                            <div className="flex gap-1 ml-auto">
+                                                <button onClick={() => openHistory(c)} className="p-1.5 text-slate-400"><History size={14} /></button>
+                                                <button onClick={() => handleEdit(c)} className="p-1.5 text-slate-400"><Edit size={14} /></button>
+                                                <button onClick={() => confirmDelete(c._id)} className="p-1.5 text-slate-400"><Trash2 size={14} /></button>
                                             </div>
                                         </div>
                                     </div>
@@ -820,215 +833,145 @@ const Dashboard = () => {
                             })}
                         </div>
 
-                        {/* DESKTOP TABLE VIEW */}
-                        <div className="hidden lg:block w-full h-full overflow-x-auto">
-                            <table className="w-full text-left border-collapse whitespace-nowrap">
-                                <thead className="sticky top-0 bg-slate-50 z-10 shadow-sm">
+                        {/* Desktop Table */}
+                        <div className="hidden xl:block overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
+                                <thead className="bg-slate-50 sticky top-0">
                                     <tr className="border-b border-slate-200">
-                                        <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-[20%]">Name</th>
-                                        <th className="px-4 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-[15%]">Phone</th>
-                                        <th className="px-4 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-[15%]">Amount</th>
-                                        <th className="px-4 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-[15%]">Status</th>
-                                        <th className="px-4 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center w-[15%]">Daily Action</th>
-                                        <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right w-[20%]">Manage</th>
+                                        <th className="px-5 py-3 text-[10px] font-bold text-slate-500 uppercase">Customer</th>
+                                        <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase">Phone</th>
+                                        <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase">Amount</th>
+                                        <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase">Status</th>
+                                        <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase text-center">Daily</th>
+                                        <th className="px-5 py-3 text-[10px] font-bold text-slate-500 uppercase text-right">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
                                     {filteredCustomers.map((c) => {
                                         const todayStatus = getTodayStatus(c.dailyStatus);
                                         const hasActionToday = todayStatus === 'Cleaned' || todayStatus === 'Missed';
-
                                         return (
-                                            <tr key={c._id} className="hover:bg-slate-50/50 transition-colors group bg-white">
-                                                <td className="px-6 py-4 font-bold text-slate-900 text-sm">
-                                                    {c.name} <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded ml-1">{c.gender?.charAt(0).toUpperCase() || 'M'}</span>
+                                            <tr key={c._id} className="hover:bg-slate-50/50">
+                                                <td className="px-5 py-3">
+                                                    <div className="font-bold text-slate-800 text-sm">{c.name}</div>
+                                                    <div className="text-[9px] text-slate-400">{c.gender?.charAt(0).toUpperCase() || 'M'}</div>
                                                 </td>
-                                                <td className="px-4 py-4 text-slate-600 font-medium text-sm">+91 {c.phone}</td>
-                                                <td className="px-4 py-4 font-black text-slate-900 text-sm">₹{c.amount || c.monthlyAmount}</td>
-                                                <td className="px-4 py-4">
-                                                    <StatusBadge status={c.status} />
-                                                    {c.missedDays > 0 && (
-                                                        <div className="mt-2">
-                                                            <span className="inline-block text-[10px] font-bold text-rose-500 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">
-                                                                {c.missedDays} missed
-                                                            </span>
-                                                            <p 
-                                                                className="text-[9px] text-slate-400 font-medium mt-1 w-full max-w-[140px] truncate"
-                                                                title={c.dailyStatus?.filter(d => d.status === 'Missed').map(d => new Date(d.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })).join(', ')}
-                                                            >
-                                                                {c.dailyStatus
-                                                                    ?.filter(d => d.status === 'Missed')
-                                                                    .map(d => new Date(d.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }))
-                                                                    .join(', ')}
-                                                            </p>
-                                                        </div>
-                                                    )}
-                                                </td>
-                                                <td className="px-4 py-4">
+                                                <td className="px-4 py-3 text-slate-600 text-sm">+91 {c.phone}</td>
+                                                <td className="px-4 py-3 font-black text-slate-900">₹{c.amount || c.monthlyAmount}</td>
+                                                <td className="px-4 py-3"><StatusBadge status={c.status} /></td>
+                                                <td className="px-4 py-3">
                                                     {c.paymentId ? (
                                                         hasActionToday ? (
-                                                            <div className="flex items-center justify-center gap-2">
-                                                                <span className={`px-2 py-1.5 rounded-md text-[11px] font-bold uppercase tracking-wide ${todayStatus === 'Cleaned' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                                                                    {todayStatus}
-                                                                </span>
-                                                                <button
-                                                                    onClick={() => updateDailyStatus(c.paymentId, "None")}
-                                                                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors"
-                                                                    title="Undo action"
-                                                                >
-                                                                    <Trash2 size={16} />
-                                                                </button>
+                                                            <div className="flex items-center justify-center gap-1">
+                                                                <span className={`px-2 py-1 rounded text-[10px] font-bold ${todayStatus === 'Cleaned' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>{todayStatus}</span>
+                                                                <button onClick={() => updateDailyStatus(c.paymentId, "None")} className="p-1 text-slate-400"><Trash2 size={12} /></button>
                                                             </div>
                                                         ) : (
-                                                            <div className="flex gap-2 justify-center">
-                                                                <button onClick={() => updateDailyStatus(c.paymentId, "Cleaned")} className="px-3 py-1.5 bg-slate-100 hover:bg-emerald-600 text-slate-600 hover:text-white rounded-lg text-xs font-bold flex items-center gap-1 transition-all active:scale-95">
-                                                                    <Check size={14} strokeWidth={3} /> Clean
-                                                                </button>
-                                                                <button onClick={() => updateDailyStatus(c.paymentId, "Missed")} className="px-3 py-1.5 bg-slate-100 hover:bg-rose-600 text-slate-600 hover:text-white rounded-lg text-xs font-bold flex items-center gap-1 transition-all active:scale-95">
-                                                                    <XCircle size={14} strokeWidth={3} /> Miss
-                                                                </button>
+                                                            <div className="flex gap-1 justify-center">
+                                                                <button onClick={() => updateDailyStatus(c.paymentId, "Cleaned")} className="px-2 py-1 bg-slate-100 rounded text-[10px] font-bold">Clean</button>
+                                                                <button onClick={() => updateDailyStatus(c.paymentId, "Missed")} className="px-2 py-1 bg-slate-100 rounded text-[10px] font-bold">Miss</button>
                                                             </div>
                                                         )
-                                                    ) : (
-                                                        <div className="text-center">
-                                                            <span className="text-slate-400 text-[10px] font-semibold bg-slate-100 px-2 py-1 rounded uppercase tracking-wide">No record</span>
-                                                        </div>
-                                                    )}
+                                                    ) : <span className="text-slate-400 text-[10px]">No record</span>}
                                                 </td>
-                                                <td className="px-6 py-4 text-right">
-                                                    <div className="flex items-center justify-end gap-1.5">
-                                                        {c.paymentId && (
-                                                            <button onClick={() => togglePaymentStatus(c.paymentId)} className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95 ${c.status === 'Pending' ? 'bg-slate-100 text-slate-700 hover:bg-emerald-100 hover:text-emerald-700' : 'bg-slate-100 text-slate-700 hover:bg-rose-100 hover:text-rose-700'}`}>
-                                                                {c.status === 'Pending' ? 'Mark Paid' : 'Mark Pending'}
-                                                            </button>
-                                                        )}
-
-                                                        {c.status === 'Pending' || c.status === 'No Record' ? (
-                                                            <>
-                                                                <button onClick={() => handleSendWhatsApp(c, 'request')} className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg text-[11px] font-bold transition-all active:scale-95" title="Send Request">
-                                                                    <MessageCircle size={14} /> Whatsapp
-                                                                </button>
-                                                                <button onClick={() => handleSendWhatsApp(c, 'reminder')} className="inline-flex items-center gap-1 px-3 py-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-lg text-[11px] font-bold transition-all active:scale-95" title="Send Reminder">
-                                                                    <AlertCircle size={14} /> Reminder
-                                                                </button>
-                                                            </>
-                                                        ) : (
-                                                            <button onClick={() => handleSendWhatsApp(c, 'thankyou')} className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-[11px] font-bold transition-all active:scale-95" title="Send Thank You">
-                                                                <MessageCircle size={14} /> Thanks
-                                                            </button>
-                                                        )}
-
-                                                        <div className="flex items-center gap-0.5 ml-2 pl-2 border-l border-slate-200">
-                                                            <button onClick={() => openHistory(c)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="View History"><History size={16} /></button>
-                                                            <button onClick={() => handleEdit(c)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Edit Customer"><Edit size={16} /></button>
-                                                            <button onClick={() => confirmDelete(c._id)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="Deactivate Customer"><Trash2 size={16} /></button>
-                                                        </div>
+                                                <td className="px-5 py-3 text-right">
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        {c.paymentId && <button onClick={() => togglePaymentStatus(c.paymentId)} className="px-2 py-1 text-[10px] font-bold bg-slate-100 rounded">Mark</button>}
+                                                        <button onClick={() => handleSendWhatsApp(c, 'request')} className="p-1 text-emerald-600"><MessageCircle size={14} /></button>
+                                                        <div className="w-px h-4 bg-slate-200 mx-1"></div>
+                                                        <button onClick={() => openHistory(c)} className="p-1 text-slate-400"><History size={14} /></button>
+                                                        <button onClick={() => handleEdit(c)} className="p-1 text-slate-400"><Edit size={14} /></button>
+                                                        <button onClick={() => confirmDelete(c._id)} className="p-1 text-slate-400"><Trash2 size={14} /></button>
                                                     </div>
                                                 </td>
                                             </tr>
                                         )
                                     })}
                                 </tbody>
-                            </table>
+                             </table>
                         </div>
-                    </div>
+                    </>
                 )}
             </div>
 
-            {/* ADD/EDIT CUSTOMER MODAL */}
+            {/* Add/Edit Modal */}
             {isModalOpen && (
-                <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 sm:p-0 bg-slate-900/60 backdrop-blur-sm transition-opacity animate-in fade-in duration-200">
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-[95%] sm:max-w-md overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
-                        <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center shrink-0">
-                            <h3 className="text-xl font-bold text-slate-900">{editingId ? "Edit Customer" : "Add New Customer"}</h3>
-                            <button onClick={resetForm} className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 p-2 rounded-full transition-all"><X size={20} strokeWidth={2.5} /></button>
+                <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl w-full max-w-[90%] sm:max-w-md overflow-hidden max-h-[90vh]">
+                        <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center">
+                            <h3 className="text-lg font-bold text-slate-900">{editingId ? "Edit Customer" : "Add Customer"}</h3>
+                            <button onClick={resetForm} className="p-1 hover:bg-slate-100 rounded-full"><X size={18} /></button>
                         </div>
-                        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 sm:space-y-5 overflow-y-auto">
+                        <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto">
                             <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Customer Name</label>
-                                <input type="text" name="name" value={formData.name} onChange={handleInputChange} placeholder="e.g. Rahul Sharma" className="w-full border border-slate-300 rounded-xl px-4 py-3 text-slate-900 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-600 outline-none transition-all" required />
+                                <label className="block text-sm font-semibold text-slate-700 mb-1">Name</label>
+                                <input type="text" name="name" value={formData.name} onChange={handleInputChange} className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" required />
                             </div>
                             <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Gender</label>
-                                <select name="gender" value={formData.gender} onChange={handleInputChange} className="w-full border border-slate-300 rounded-xl px-4 py-3 text-slate-900 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-600 outline-none transition-all" required>
+                                <label className="block text-sm font-semibold text-slate-700 mb-1">Gender</label>
+                                <select name="gender" value={formData.gender} onChange={handleInputChange} className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm">
                                     <option value="male">Male (Sir)</option>
                                     <option value="female">Female (Ma'am)</option>
-                                    <option value="other">Other (General)</option>
+                                    <option value="other">Other</option>
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Phone Number</label>
-                                <div className="flex border border-slate-300 rounded-xl overflow-hidden focus-within:ring-4 focus-within:ring-blue-500/10 focus-within:border-blue-600 transition-all bg-white">
-                                    <span className="flex items-center justify-center px-3 sm:px-4 bg-slate-50 text-slate-500 font-medium border-r border-slate-300">+91</span>
-                                    <input type="tel" name="phone" value={formData.phone} onChange={handleInputChange} placeholder="98765 43210" className="w-full px-4 py-3 text-slate-900 outline-none bg-transparent" required />
+                                <label className="block text-sm font-semibold text-slate-700 mb-1">Phone</label>
+                                <div className="flex border border-slate-300 rounded-xl overflow-hidden">
+                                    <span className="px-3 py-2.5 bg-slate-50 text-slate-500 text-sm border-r">+91</span>
+                                    <input type="tel" name="phone" value={formData.phone} onChange={handleInputChange} className="flex-1 px-3 py-2.5 text-sm outline-none" required />
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Monthly Amount (₹)</label>
-                                <input type="number" name="amount" value={formData.amount} onChange={handleInputChange} placeholder="e.g. 500" className="w-full border border-slate-300 rounded-xl px-4 py-3 text-slate-900 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-600 outline-none transition-all" required />
+                                <label className="block text-sm font-semibold text-slate-700 mb-1">Monthly Amount (₹)</label>
+                                <input type="number" name="amount" value={formData.amount} onChange={handleInputChange} className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm" required />
                             </div>
-                            <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row justify-end gap-3">
-                                <button type="button" onClick={resetForm} className="px-5 py-2.5 text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl font-bold transition-all w-full sm:w-auto text-center">Cancel</button>
-                                <button type="submit" className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-md active:scale-95 transition-all flex items-center justify-center gap-2 w-full sm:w-auto"><Save size={18} strokeWidth={3} /> {editingId ? 'Update' : 'Save'}</button>
+                            <div className="flex gap-3 pt-2">
+                                <button type="button" onClick={resetForm} className="flex-1 py-2.5 text-slate-700 bg-white border border-slate-300 rounded-xl font-bold text-sm">Cancel</button>
+                                <button type="submit" className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2"><Save size={16} /> {editingId ? 'Update' : 'Save'}</button>
                             </div>
                         </form>
                     </div>
                 </div>
             )}
 
-            {/* SINGLE CUSTOMER HISTORY MODAL */}
+            {/* History Modal */}
             {historyModalOpen && selectedCustomer && (
-                <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 sm:p-0 bg-slate-900/60 backdrop-blur-sm transition-opacity animate-in fade-in duration-200">
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-[95%] sm:max-w-md overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
-                        <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl w-full max-w-[90%] sm:max-w-md overflow-hidden max-h-[80vh]">
+                        <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                             <div>
-                                <h3 className="text-lg font-bold text-slate-900">Payment History</h3>
-                                <p className="text-sm font-semibold text-slate-500">{selectedCustomer.name}</p>
+                                <h3 className="font-bold text-slate-900">Payment History</h3>
+                                <p className="text-sm text-slate-500">{selectedCustomer.name}</p>
                             </div>
-                            <button onClick={() => setHistoryModalOpen(false)} className="text-slate-400 hover:text-slate-700 hover:bg-slate-200 p-2 rounded-full transition-all"><X size={20} strokeWidth={2.5} /></button>
+                            <button onClick={() => setHistoryModalOpen(false)} className="p-1 hover:bg-slate-200 rounded-full"><X size={18} /></button>
                         </div>
-
-                        <div className="px-6 py-4 bg-indigo-50 border-b border-indigo-100 flex justify-between items-center shrink-0">
+                        <div className="p-4 bg-indigo-50 flex justify-between">
                             <span className="font-bold text-indigo-800">Total Collected:</span>
-                            <span className="text-xl font-black text-indigo-600">₹{totalPaidBySelected}</span>
+                            <span className="font-black text-indigo-600">₹{totalPaidBySelected}</span>
                         </div>
-
-                        <div className="p-4 sm:p-6 overflow-y-auto bg-white flex-1">
+                        <div className="p-4 overflow-y-auto max-h-[50vh]">
                             {customerHistory.length === 0 ? (
-                                <div className="text-center py-6 text-slate-500">
-                                    <Clock className="mx-auto mb-2 opacity-20" size={32} />
-                                    <p className="font-medium">No payment history recorded yet.</p>
-                                </div>
+                                <p className="text-center text-slate-500 py-6">No payment history.</p>
                             ) : (
-                                <ul className="space-y-3">
+                                <ul className="space-y-2">
                                     {customerHistory.map((record) => (
-                                        <li key={record._id} className="flex flex-col p-3 rounded-xl border border-slate-100 bg-slate-50">
-                                            <div className="flex justify-between items-center mb-1">
+                                        <li key={record._id} className="p-3 rounded-xl border border-slate-100 bg-slate-50">
+                                            <div className="flex justify-between items-center">
                                                 <div className="flex items-center gap-2">
-                                                    {record.status === 'Paid' ? (
-                                                        <div className="bg-emerald-100 text-emerald-600 p-1 rounded-full"><CheckCircle2 size={14} strokeWidth={3} /></div>
-                                                    ) : (
-                                                        <div className="bg-rose-100 text-rose-600 p-1 rounded-full"><AlertCircle size={14} strokeWidth={3} /></div>
-                                                    )}
-                                                    <div>
-                                                        <p className="font-bold text-slate-800">{record.month}</p>
-                                                    </div>
+                                                    {record.status === 'Paid' ? <CheckCircle2 size={14} className="text-emerald-600" /> : <AlertCircle size={14} className="text-rose-600" />}
+                                                    <span className="font-bold text-slate-800">{record.month}</span>
                                                 </div>
                                                 <span className={`font-black ${record.status === 'Paid' ? 'text-emerald-600' : 'text-rose-600'}`}>₹{record.amount}</span>
                                             </div>
-                                            {record.paidDate && <span className="text-xs font-semibold text-slate-400 ml-7">Paid on: {record.paidDate}</span>}
-                                            {record.missedDays > 0 && (
-                                                <div className="mt-2 ml-7">
-                                                    <span className="text-xs text-rose-500 font-bold">Missed days that month: {record.missedDays}</span>
-                                                </div>
-                                            )}
+                                            {record.paidDate && <p className="text-xs text-slate-400 ml-6 mt-1">Paid: {record.paidDate}</p>}
                                         </li>
                                     ))}
                                 </ul>
                             )}
                         </div>
-                        <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end shrink-0">
-                            <button onClick={() => setHistoryModalOpen(false)} className="px-5 py-2.5 w-full text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 rounded-xl font-bold transition-all shadow-sm">Close History</button>
+                        <div className="p-4 border-t border-slate-100">
+                            <button onClick={() => setHistoryModalOpen(false)} className="w-full py-2.5 text-slate-700 bg-white border border-slate-300 rounded-xl font-bold">Close</button>
                         </div>
                     </div>
                 </div>
