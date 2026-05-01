@@ -22,6 +22,10 @@ const Dashboard = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedPaymentDetails, setSelectedPaymentDetails] = useState(null);
 
+    // --- NEW: WhatsApp Sent Tracker ---
+    // Tracks which customers have been sent which message type in the current session
+    const [waSentTracker, setWaSentTracker] = useState({});
+
     // --- GLOBAL HISTORY STATES ---
     const [globalHistoryData, setGlobalHistoryData] = useState([]);
     const [isHistoryLoading, setIsHistoryLoading] = useState(false);
@@ -355,6 +359,9 @@ const Dashboard = () => {
 
         const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
         window.open(whatsappUrl, '_blank');
+
+        // Update Tracker UI so we know a message was sent
+        setWaSentTracker(prev => ({ ...prev, [`${customer._id}-${type}`]: true }));
     };
 
     const filteredCustomers = dashboardData.filter(c =>
@@ -369,7 +376,7 @@ const Dashboard = () => {
 
 
     // ==========================================
-    // RENDER: GLOBAL HISTORY PAGE VIEW (FULLY RESPONSIVE)
+    // RENDER: GLOBAL HISTORY PAGE VIEW 
     // ==========================================
     if (currentView === 'history') {
         return (
@@ -778,54 +785,88 @@ const Dashboard = () => {
                     </div>
                 ) : (
                     <>
-                        {/* Mobile Card Grid */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 xl:hidden gap-3 p-4 bg-slate-50/50">
+                        {/* ---------------------------------------------------- */}
+                        {/* MOBILE CARD GRID (IMPROVED LAYOUT) */}
+                        {/* ---------------------------------------------------- */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:hidden gap-4 p-4 sm:p-6 bg-slate-50/50">
                             {filteredCustomers.map((c) => {
                                 const todayStatus = getTodayStatus(c.dailyStatus);
                                 const hasActionToday = todayStatus === 'Cleaned' || todayStatus === 'Missed';
                                 return (
-                                    <div key={c._id} className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-                                        <div className="flex justify-between items-start mb-3">
-                                            <div className="flex-1 min-w-0">
-                                                <h3 className="font-bold text-slate-900 text-base truncate">{c.name}</h3>
-                                                <p className="text-slate-500 text-xs mt-0.5">+91 {c.phone}</p>
+                                    <div key={c._id} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col gap-4">
+                                        {/* Mobile Card Header */}
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <h3 className="font-extrabold text-slate-900 text-lg leading-tight">{c.name}</h3>
+                                                <p className="text-slate-500 text-sm font-medium mt-1">+91 {c.phone}</p>
                                             </div>
-                                            <div className="text-right shrink-0 ml-2">
-                                                <p className="font-black text-slate-900">₹{c.amount || c.monthlyAmount}</p>
+                                            <div className="flex flex-col items-end gap-1.5">
+                                                <p className="font-black text-slate-900 text-xl">₹{c.amount || c.monthlyAmount}</p>
                                                 <StatusBadge status={c.status} />
                                             </div>
                                         </div>
+
+                                        {/* Mobile Card Daily Service Area */}
                                         {c.paymentId && (
-                                            <div className="mb-3 bg-slate-50 p-2 rounded-lg">
-                                                <div className="flex justify-between text-xs mb-2">
-                                                    <span className="font-bold text-slate-500">Today</span>
-                                                    {c.missedDays > 0 && <span className="text-rose-500 font-bold">Missed: {c.missedDays}</span>}
+                                            <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Daily Service</span>
+                                                    {c.missedDays > 0 && <span className="bg-rose-100 text-rose-700 px-2 py-0.5 rounded text-[10px] font-bold">Missed: {c.missedDays}</span>}
                                                 </div>
                                                 {hasActionToday ? (
-                                                    <div className="flex justify-between items-center">
-                                                        <span className={`text-xs font-bold ${todayStatus === 'Cleaned' ? 'text-emerald-600' : 'text-rose-600'}`}>{todayStatus}</span>
-                                                        <button onClick={() => updateDailyStatus(c.paymentId, "None")} className="text-slate-400 text-xs">Undo</button>
+                                                    <div className="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-slate-200">
+                                                        <span className={`text-sm font-bold flex items-center gap-1 ${todayStatus === 'Cleaned' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                            <CheckCircle2 size={16}/> {todayStatus} Today
+                                                        </span>
+                                                        <button onClick={() => updateDailyStatus(c.paymentId, "None")} className="text-slate-400 hover:text-slate-600 text-xs font-bold px-2 py-1 bg-slate-100 rounded-md">Undo</button>
                                                     </div>
                                                 ) : (
                                                     <div className="flex gap-2">
-                                                        <button onClick={() => updateDailyStatus(c.paymentId, "Cleaned")} className="flex-1 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-bold">Clean</button>
-                                                        <button onClick={() => updateDailyStatus(c.paymentId, "Missed")} className="flex-1 py-1.5 bg-rose-50 text-rose-700 rounded-lg text-xs font-bold">Miss</button>
+                                                        <button onClick={() => updateDailyStatus(c.paymentId, "Cleaned")} className="flex-1 py-2.5 bg-white border border-emerald-200 hover:bg-emerald-50 text-emerald-700 rounded-lg text-sm font-bold shadow-sm transition-all flex items-center justify-center gap-1">✨ Clean</button>
+                                                        <button onClick={() => updateDailyStatus(c.paymentId, "Missed")} className="flex-1 py-2.5 bg-white border border-rose-200 hover:bg-rose-50 text-rose-700 rounded-lg text-sm font-bold shadow-sm transition-all flex items-center justify-center gap-1">❌ Miss</button>
                                                     </div>
                                                 )}
                                             </div>
                                         )}
-                                        <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
+
+                                        {/* Mobile Card Actions & Comms */}
+                                        <div className="space-y-3 pt-1">
+                                            {/* Payment Toggle */}
                                             {c.paymentId && (
-                                                <button onClick={() => togglePaymentStatus(c.paymentId)} className={`px-2 py-1 rounded-lg text-[10px] font-bold ${c.status === 'Pending' ? 'bg-slate-100 hover:bg-emerald-100' : 'bg-slate-100 hover:bg-rose-100'}`}>
-                                                    {c.status === 'Pending' ? 'Mark Paid' : 'Mark Pending'}
+                                                <button 
+                                                    onClick={() => togglePaymentStatus(c.paymentId)} 
+                                                    className={`w-full py-2.5 rounded-xl text-sm font-black transition-all shadow-sm flex justify-center items-center gap-2 ${c.status === 'Pending' ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-amber-100 hover:bg-amber-200 text-amber-800'}`}
+                                                >
+                                                    {c.status === 'Pending' ? <><CheckCircle2 size={18}/> Mark as Paid</> : <><AlertCircle size={18}/> Revert to Pending</>}
                                                 </button>
                                             )}
-                                            <button onClick={() => handleSendWhatsApp(c, 'request')} className="px-2 py-1 bg-emerald-50 text-emerald-700 rounded-lg text-[10px] font-bold">Bill</button>
-                                            <button onClick={() => handleSendWhatsApp(c, 'reminder')} className="px-2 py-1 bg-rose-50 text-rose-700 rounded-lg text-[10px] font-bold">Nudge</button>
-                                            <div className="flex gap-1 ml-auto">
-                                                <button onClick={() => openHistory(c)} className="p-1.5 text-slate-400"><History size={14} /></button>
-                                                <button onClick={() => handleEdit(c)} className="p-1.5 text-slate-400"><Edit size={14} /></button>
-                                                <button onClick={() => confirmDelete(c._id)} className="p-1.5 text-slate-400"><Trash2 size={14} /></button>
+
+                                            {/* WhatsApp Comms - HIDES/SHOWS BASED ON PAID STATUS */}
+                                            <div className="flex gap-2">
+                                                {c.status === 'Paid' ? (
+                                                    <button onClick={() => handleSendWhatsApp(c, 'thankyou')} className={`flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${waSentTracker[`${c._id}-thankyou`] ? 'bg-teal-100 text-teal-800 border border-teal-200' : 'bg-teal-50 text-teal-700 border border-teal-100 hover:bg-teal-100'}`}>
+                                                        <MessageCircle size={18} /> {waSentTracker[`${c._id}-thankyou`] ? 'Thanks Sent ✓' : 'Send Thanks'}
+                                                    </button>
+                                                ) : (
+                                                    <>
+                                                        <button onClick={() => handleSendWhatsApp(c, 'request')} className={`flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${waSentTracker[`${c._id}-request`] ? 'bg-blue-100 text-blue-800 border border-blue-200' : 'bg-blue-50 text-blue-700 border border-blue-100 hover:bg-blue-100'}`}>
+                                                            <MessageCircle size={18} /> {waSentTracker[`${c._id}-request`] ? 'Bill Sent ✓' : 'Send Bill'}
+                                                        </button>
+                                                        <button onClick={() => handleSendWhatsApp(c, 'reminder')} className={`flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${waSentTracker[`${c._id}-reminder`] ? 'bg-rose-100 text-rose-800 border border-rose-200' : 'bg-rose-50 text-rose-700 border border-rose-100 hover:bg-rose-100'}`}>
+                                                            <AlertCircle size={18} /> {waSentTracker[`${c._id}-reminder`] ? 'Nudged ✓' : 'Nudge'}
+                                                        </button>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Mobile Utility Footer */}
+                                        <div className="flex justify-between items-center pt-3 border-t border-slate-100 mt-1">
+                                            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Manage Profile</span>
+                                            <div className="flex gap-2">
+                                                <button onClick={() => openHistory(c)} className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-500 rounded-lg transition-colors"><History size={16} /></button>
+                                                <button onClick={() => handleEdit(c)} className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-500 rounded-lg transition-colors"><Edit size={16} /></button>
+                                                <button onClick={() => confirmDelete(c._id)} className="p-2 bg-rose-50 hover:bg-rose-100 text-rose-500 rounded-lg transition-colors"><Trash2 size={16} /></button>
                                             </div>
                                         </div>
                                     </div>
@@ -833,7 +874,9 @@ const Dashboard = () => {
                             })}
                         </div>
 
-                        {/* Desktop Table */}
+                        {/* ---------------------------------------------------- */}
+                        {/* DESKTOP TABLE VIEW */}
+                        {/* ---------------------------------------------------- */}
                         <div className="hidden xl:block overflow-x-auto">
                             <table className="w-full text-left border-collapse">
                                 <thead className="bg-slate-50 sticky top-0">
@@ -875,19 +918,40 @@ const Dashboard = () => {
                                                     ) : <span className="text-slate-400 text-[10px]">No record</span>}
                                                 </td>
                                                 <td className="px-5 py-3 text-right">
-                                                    <div className="flex items-center justify-end gap-1">
-                                                        {c.paymentId && <button onClick={() => togglePaymentStatus(c.paymentId)} className="px-2 py-1 text-[10px] font-bold bg-slate-100 rounded">Mark</button>}
+                                                    <div className="flex items-center justify-end gap-1.5">
+                                                        {/* Toggle Paid Status */}
+                                                        {c.paymentId && (
+                                                            <button 
+                                                                onClick={() => togglePaymentStatus(c.paymentId)} 
+                                                                className="px-2 py-1.5 text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded transition-colors mr-1"
+                                                            >
+                                                                {c.status === 'Pending' ? 'Mark Paid' : 'Mark Pending'}
+                                                            </button>
+                                                        )}
 
-                                                        {/* Bill Button */}
-                                                        <button onClick={() => handleSendWhatsApp(c, 'request')} className="p-1 text-emerald-600"><MessageCircle size={14} /></button>
+                                                        {/* WhatsApp Conditional Logic */}
+                                                        {c.status === 'Paid' ? (
+                                                            <button onClick={() => handleSendWhatsApp(c, 'thankyou')} className="p-1.5 text-teal-600 hover:bg-teal-50 rounded transition-colors relative" title="Send Thank You">
+                                                                <MessageCircle size={16} />
+                                                                {waSentTracker[`${c._id}-thankyou`] && <CheckCircle2 size={10} className="absolute -top-1 -right-1 text-teal-600 bg-white rounded-full" />}
+                                                            </button>
+                                                        ) : (
+                                                            <>
+                                                                <button onClick={() => handleSendWhatsApp(c, 'request')} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors relative" title="Send Bill">
+                                                                    <MessageCircle size={16} />
+                                                                    {waSentTracker[`${c._id}-request`] && <CheckCircle2 size={10} className="absolute -top-1 -right-1 text-blue-600 bg-white rounded-full" />}
+                                                                </button>
+                                                                <button onClick={() => handleSendWhatsApp(c, 'reminder')} className="p-1.5 text-rose-500 hover:bg-rose-50 rounded transition-colors relative" title="Send Reminder">
+                                                                    <AlertCircle size={16} />
+                                                                    {waSentTracker[`${c._id}-reminder`] && <CheckCircle2 size={10} className="absolute -top-1 -right-1 text-rose-600 bg-white rounded-full" />}
+                                                                </button>
+                                                            </>
+                                                        )}
 
-                                                        {/* 👇 NEW: Nudge/Reminder Button Added Here */}
-                                                        <button onClick={() => handleSendWhatsApp(c, 'reminder')} className="p-1 text-rose-500"><AlertCircle size={14} /></button>
-
-                                                        <div className="w-px h-4 bg-slate-200 mx-1"></div>
-                                                        <button onClick={() => openHistory(c)} className="p-1 text-slate-400"><History size={14} /></button>
-                                                        <button onClick={() => handleEdit(c)} className="p-1 text-slate-400"><Edit size={14} /></button>
-                                                        <button onClick={() => confirmDelete(c._id)} className="p-1 text-slate-400"><Trash2 size={14} /></button>
+                                                        <div className="w-px h-5 bg-slate-200 mx-1"></div>
+                                                        <button onClick={() => openHistory(c)} className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors"><History size={16} /></button>
+                                                        <button onClick={() => handleEdit(c)} className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors"><Edit size={16} /></button>
+                                                        <button onClick={() => confirmDelete(c._id)} className="p-1.5 text-rose-400 hover:text-rose-600 transition-colors"><Trash2 size={16} /></button>
                                                     </div>
                                                 </td>
                                             </tr>
