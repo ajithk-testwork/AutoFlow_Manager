@@ -853,7 +853,7 @@ const Dashboard = () => {
                                                             <MessageCircle size={18} /> {waSentTracker[`${c._id}-request`] ? 'Bill Sent ✓' : 'Send Bill'}
                                                         </button>
                                                         <button onClick={() => handleSendWhatsApp(c, 'reminder')} className={`flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${waSentTracker[`${c._id}-reminder`] ? 'bg-rose-100 text-rose-800 border border-rose-200' : 'bg-rose-50 text-rose-700 border border-rose-100 hover:bg-rose-100'}`}>
-                                                            <AlertCircle size={18} /> {waSentTracker[`${c._id}-reminder`] ? 'Nudged ✓' : 'Nudge'}
+                                                            <AlertCircle size={18} /> {waSentTracker[`${c._id}-reminder`] ? 'Reminded ✓' : 'Reminder'}
                                                         </button>
                                                     </>
                                                 )}
