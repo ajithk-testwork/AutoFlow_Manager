@@ -4,7 +4,7 @@ import {
     Users, IndianRupee, AlertCircle, Plus, X, Save, MessageCircle,
     CheckCircle2, Clock, Edit, Trash2, Search, History, CalendarDays,
     Check, XCircle, ChevronDown, ChevronUp, AlertTriangle, Database, ArrowLeft,
-    FileText, Menu, X as XIcon
+    FileText, Menu, X as XIcon, Filter, FilterX
 } from 'lucide-react';
 
 const API_URL = 'https://autoflow-manager.onrender.com/api/customers';
@@ -21,9 +21,11 @@ const Dashboard = () => {
     const [customerHistory, setCustomerHistory] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedPaymentDetails, setSelectedPaymentDetails] = useState(null);
+    
+    // --- NEW: Filter state for Paid/Pending status ---
+    const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL', 'PAID', 'PENDING'
 
     // --- NEW: WhatsApp Sent Tracker ---
-    // Tracks which customers have been sent which message type in the current session
     const [waSentTracker, setWaSentTracker] = useState({});
 
     // --- GLOBAL HISTORY STATES ---
@@ -174,6 +176,18 @@ const Dashboard = () => {
         });
         return record ? record.status : null;
     };
+
+    // --- Apply search and status filter to customers ---
+    const filteredCustomers = dashboardData.filter(c => {
+        const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase());
+        let matchesStatus = true;
+        if (statusFilter === 'PAID') {
+            matchesStatus = c.status === 'Paid';
+        } else if (statusFilter === 'PENDING') {
+            matchesStatus = c.status === 'Pending' || c.status === 'No Record';
+        }
+        return matchesSearch && matchesStatus;
+    });
 
     const totalCustomers = dashboardData.length;
     const expectedRevenue = dashboardData.reduce((sum, c) => sum + (c.amount || c.monthlyAmount || 0), 0);
@@ -360,13 +374,8 @@ const Dashboard = () => {
         const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
         window.open(whatsappUrl, '_blank');
 
-        // Update Tracker UI so we know a message was sent
         setWaSentTracker(prev => ({ ...prev, [`${customer._id}-${type}`]: true }));
     };
-
-    const filteredCustomers = dashboardData.filter(c =>
-        c.name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
 
     const StatusBadge = ({ status }) => {
         if (status === 'Paid') return <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-100 uppercase tracking-wide">Paid</span>;
@@ -771,9 +780,50 @@ const Dashboard = () => {
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 w-full overflow-hidden flex flex-col flex-1">
                 <div className="px-4 py-3 border-b border-slate-100 flex flex-col sm:flex-row sm:justify-between sm:items-center bg-slate-50/50 gap-3">
                     <h2 className="text-base font-bold text-slate-900">Active Subscriptions</h2>
-                    <div className="relative w-full sm:w-64">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                        <input type="text" placeholder="Search by name..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                    <div className="flex gap-2 w-full sm:w-auto">
+                        <div className="relative w-full sm:w-64">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                            <input 
+                                type="text" 
+                                placeholder="Search by name..." 
+                                value={searchTerm} 
+                                onChange={(e) => setSearchTerm(e.target.value)} 
+                                className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" 
+                            />
+                        </div>
+                        {/* --- NEW: Status Filter Dropdown --- */}
+                        <div className="relative">
+                            <button
+                                onClick={() => {
+                                    if (statusFilter === 'ALL') setStatusFilter('PAID');
+                                    else if (statusFilter === 'PAID') setStatusFilter('PENDING');
+                                    else setStatusFilter('ALL');
+                                }}
+                                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all border ${
+                                    statusFilter === 'ALL' 
+                                        ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+                                        : statusFilter === 'PAID'
+                                        ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
+                                        : 'bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100'
+                                }`}
+                            >
+                                {statusFilter === 'ALL' ? <Filter size={16} /> : statusFilter === 'PAID' ? <CheckCircle2 size={16} /> : <Clock size={16} />}
+                                <span className="hidden sm:inline">
+                                    {statusFilter === 'ALL' ? 'All Status' : statusFilter === 'PAID' ? 'Paid Only' : 'Pending Only'}
+                                </span>
+                                <span className="sm:hidden">
+                                    {statusFilter === 'ALL' ? 'All' : statusFilter === 'PAID' ? 'Paid' : 'Pending'}
+                                </span>
+                                {statusFilter !== 'ALL' && (
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); setStatusFilter('ALL'); }}
+                                        className="ml-1 p-0.5 rounded-full hover:bg-white/50"
+                                    >
+                                        <X size={12} />
+                                    </button>
+                                )}
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -781,7 +831,7 @@ const Dashboard = () => {
                     <div className="p-8 sm:p-12 flex flex-col items-center justify-center text-center">
                         <div className="bg-slate-100 p-4 rounded-full mb-3 text-slate-400"><Users size={28} /></div>
                         <h3 className="text-slate-900 font-bold text-base mb-1">No customers found</h3>
-                        <p className="text-slate-500 text-sm">Add a customer to start tracking</p>
+                        <p className="text-slate-500 text-sm">Try changing your search or filter criteria</p>
                     </div>
                 ) : (
                     <>
@@ -811,6 +861,7 @@ const Dashboard = () => {
                                             <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
                                                 <div className="flex justify-between items-center mb-2">
                                                     <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Daily Service</span>
+                                                    {/* Mobile shows missed days correctly */}
                                                     {c.missedDays > 0 && <span className="bg-rose-100 text-rose-700 px-2 py-0.5 rounded text-[10px] font-bold">Missed: {c.missedDays}</span>}
                                                 </div>
                                                 {hasActionToday ? (
@@ -875,7 +926,7 @@ const Dashboard = () => {
                         </div>
 
                         {/* ---------------------------------------------------- */}
-                        {/* DESKTOP TABLE VIEW */}
+                        {/* DESKTOP TABLE VIEW (FIXED: MISSED DAYS DISPLAYED) */}
                         {/* ---------------------------------------------------- */}
                         <div className="hidden xl:block overflow-x-auto">
                             <table className="w-full text-left border-collapse">
@@ -886,6 +937,7 @@ const Dashboard = () => {
                                         <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase">Amount</th>
                                         <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase">Status</th>
                                         <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase text-center">Daily</th>
+                                        <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase text-center">Missed Days</th>
                                         <th className="px-5 py-3 text-[10px] font-bold text-slate-500 uppercase text-right">Actions</th>
                                     </tr>
                                 </thead>
@@ -916,6 +968,16 @@ const Dashboard = () => {
                                                             </div>
                                                         )
                                                     ) : <span className="text-slate-400 text-[10px]">No record</span>}
+                                                </td>
+                                                {/* FIXED: Desktop now shows missed days correctly */}
+                                                <td className="px-4 py-3 text-center">
+                                                    {c.missedDays > 0 ? (
+                                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700">
+                                                            {c.missedDays} days
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-slate-300 text-xs">—</span>
+                                                    )}
                                                 </td>
                                                 <td className="px-5 py-3 text-right">
                                                     <div className="flex items-center justify-end gap-1.5">
