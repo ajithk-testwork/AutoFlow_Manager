@@ -1,0 +1,1158 @@
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import API from '../utils/api';
+import { useNavigate } from "react-router-dom";
+import {
+    Users, IndianRupee, AlertCircle, Plus, X, Save, MessageCircle,
+    CheckCircle2, Clock, Edit, Trash2, Search, History, CalendarDays,
+    ChevronDown, ChevronUp, AlertTriangle, Database, ArrowLeft,
+    FileText, Filter, LogOut, Settings
+} from 'lucide-react';
+
+const Dashboard = () => {
+    const navigate = useNavigate();
+    const token = localStorage.getItem('token');
+
+    // --- VIEW SWITCHER ---
+    const [currentView, setCurrentView] = useState('dashboard');
+
+    // --- DASHBOARD STATES ---
+    const [dashboardData, setDashboardData] = useState([]);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingId, setEditingId] = useState(null);
+    const [historyModalOpen, setHistoryModalOpen] = useState(false);
+    const [selectedCustomer, setSelectedCustomer] = useState(null);
+    const [customerHistory, setCustomerHistory] = useState([]);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [selectedPaymentDetails, setSelectedPaymentDetails] = useState(null);
+    const [statusFilter, setStatusFilter] = useState('ALL');
+
+
+    const getMonthKey = () => {
+        const date = new Date();
+        return `${date.toLocaleString("en-US", { month: "long" })} ${date.getFullYear()}`;
+    };
+
+    const [selectedMonth, setSelectedMonth] = useState(() => {
+        const savedMonth = localStorage.getItem("autoflow_selectedMonth");
+        return savedMonth || getMonthKey();
+    });
+
+    const [isMonthDropdownOpen, setIsMonthDropdownOpen] = useState(false);
+    const dropdownRef = useRef(null);
+
+    const [waSentTracker, setWaSentTracker] = useState(() => {
+        const savedMonth = localStorage.getItem("autoflow_selectedMonth") || getMonthKey();
+        const savedTracker = localStorage.getItem(`autoflow_waTracker_${savedMonth}`);
+        return savedTracker ? JSON.parse(savedTracker) : {};
+    });
+
+    // Extracting client specific details injected upon register/login
+    const clientUpiId = localStorage.getItem("autoflow_upiId") || "quicklyajithda3@okicici";
+    const clientPhone = localStorage.getItem("autoflow_whatsapp") || "9566019538";
+
+    // --- WHATSAPP TEMPLATE STATES ---
+    const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+    
+    const [templates, setTemplates] = useState({
+        requestTemplate: `Hello {{name}},\n\n📅 Billing Month: {{month}}\n\n🚗 Service Report:\nMissed Days: {{missedDays}}\nDates Missed: {{missedDates}}\n\n✅ Final Amount Due: ₹{{amount}}\n\n💳 Payment Options:\n\n🔹 UPI ID:\n\`\`\`{{upi}}\`\`\`\n\n🔹 GPay / PhonePe:\n\`\`\`{{phone}}\`\`\`\n\nThank you! 🚗✨`,
+        reminderTemplate: `Hello {{name}},\n\nThis is a gentle reminder that your payment for *{{month}}* is still pending.\n\n💰 Final Amount Due: ₹{{amount}}\n\n💳 Payment Options:\n\n🔹 UPI ID:\n\`\`\`{{upi}}\`\`\`\n\n🔹 GPay / PhonePe:\n\`\`\`{{phone}}\`\`\`\n\nThank you! 🚗`,
+        thankyouTemplate: `Hello {{name}},\n\nWe have received your payment of ₹{{amount}} for *{{month}}*. \n\nThank you for choosing us! 🚗✨`,
+        upiId: clientUpiId,
+        phone: clientPhone
+    });
+
+
+    // 1. THIS SAVES THE TICK MARKS TO LOCAL STORAGE EVERY TIME YOU CLICK SEND
+    useEffect(() => {
+        if (selectedMonth) {
+            localStorage.setItem(`autoflow_waTracker_${selectedMonth}`, JSON.stringify(waSentTracker));
+        }
+    }, [waSentTracker, selectedMonth]);
+
+    // 2. THIS SWITCHES THE TICK MARKS WHEN YOU CHANGE THE VIEWING MONTH
+    useEffect(() => {
+        const savedTracker = localStorage.getItem(`autoflow_waTracker_${selectedMonth}`);
+        setWaSentTracker(savedTracker ? JSON.parse(savedTracker) : {});
+    }, [selectedMonth]);
+
+    // --- GLOBAL HISTORY STATES ---
+    const [globalHistoryData, setGlobalHistoryData] = useState([]);
+    const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+    const [monthSearchTerm, setMonthSearchTerm] = useState('');
+    const [expandedMonth, setExpandedMonth] = useState(null);
+    const [initializedMonths, setInitializedMonths] = useState([]);
+
+    const [formData, setFormData] = useState({
+        name: '', phone: '', amount: '', gender: 'male'
+    });
+
+    const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+    const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', onConfirm: null, type: 'danger' });
+
+    // --- Retrieve Selected Service from ServiceSelection ---
+    const selectedServiceStr = localStorage.getItem("selectedService");
+    const selectedService = selectedServiceStr ? JSON.parse(selectedServiceStr) : null;
+    const workspaceName = selectedService?.serviceName || "AutoFlow Workspace";
+    const serviceId = selectedService?._id;
+
+    // --- HELPER: Auth Headers ---
+    const getAuthHeaders = () => ({
+        headers: { Authorization: `Bearer ${token}` }
+    });
+
+    const showToast = (message, type = 'success') => {
+        setToast({ show: true, message, type });
+        setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 3000);
+    };
+
+    const availableMonths = useMemo(() => {
+        const months = [];
+        const date = new Date();
+        date.setMonth(date.getMonth() - 3);
+
+        for (let i = 0; i < 10; i++) {
+            months.push(`${date.toLocaleString("en-US", { month: "long" })} ${date.getFullYear()}`);
+            date.setMonth(date.getMonth() + 1);
+        }
+        return months;
+    }, []);
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                setIsMonthDropdownOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    // --- DYNAMIC MATH LOGIC: Calculate precise deduction per day ---
+    const getDynamicAmount = (baseAmount, missed, monthStr) => {
+        if (!baseAmount) return 0;
+        try {
+            const [mName, yStr] = monthStr.split(" ");
+            const year = parseInt(yStr) || new Date().getFullYear();
+            const monthIndex = new Date(`${mName} 1, ${year}`).getMonth();
+            const daysInMonth = new Date(year, monthIndex + 1, 0).getDate() || 30;
+
+            const perDay = baseAmount / daysInMonth;
+            const deduction = Math.round(missed * perDay);
+            return Math.max(0, Math.round(baseAmount - deduction));
+        } catch (e) {
+            return baseAmount;
+        }
+    };
+
+    // Fetch initialized months
+    const fetchInitializedMonths = async () => {
+        try {
+            const res = await API.get(`/global/history?serviceId=${serviceId}`, getAuthHeaders());
+            const months = res.data.map(d => d.month);
+            setInitializedMonths(months);
+            return months;
+        } catch (error) {
+            console.error("Failed to fetch months:", error);
+            return [];
+        }
+    };
+
+    // Fetch Custom WhatsApp Templates
+    const fetchTemplates = async () => {
+        if (!serviceId) return;
+        try {
+            const res = await API.get(`/whatsapp-template/${serviceId}`, getAuthHeaders());
+            if (res.data) {
+                setTemplates({
+                    requestTemplate: res.data.requestTemplate || templates.requestTemplate,
+                    reminderTemplate: res.data.reminderTemplate || templates.reminderTemplate,
+                    thankyouTemplate: res.data.thankyouTemplate || templates.thankyouTemplate,
+                    upiId: res.data.upiId || templates.upiId,
+                    phone: res.data.phone || templates.phone
+                });
+            }
+        } catch (error) {
+            console.log("Using default templates.");
+        }
+    };
+
+    // Save Custom WhatsApp Templates
+    const handleTemplateChange = (e) => {
+        const { name, value } = e.target;
+        setTemplates(prev => ({ ...prev, [name]: value }));
+    };
+
+    const saveTemplatesToDB = async (e) => {
+        e.preventDefault();
+        try {
+            const tenantId = localStorage.getItem('tenantId') || serviceId;
+            const payload = {
+                tenantId,
+                serviceId,
+                ...templates
+            };
+
+            await API.post(`/whatsapp-template/save`, payload, getAuthHeaders());
+            showToast("Templates saved successfully!", "success");
+            setIsTemplateModalOpen(false);
+        } catch (error) {
+            showToast(error.response?.data?.message || "Failed to save templates.", "error");
+        }
+    };
+
+
+    const navigateToGlobalHistory = async () => {
+        setCurrentView('history');
+        setIsHistoryLoading(true);
+        setMonthSearchTerm('');
+        setExpandedMonth(null);
+        try {
+            const res = await API.get(`/global/history?serviceId=${serviceId}`, getAuthHeaders());
+            setGlobalHistoryData(res.data);
+            setInitializedMonths(res.data.map(d => d.month));
+        } catch (error) {
+            showToast("Failed to load DB history", "error");
+        } finally {
+            setIsHistoryLoading(false);
+        }
+    };
+
+    const fetchDashboardData = async () => {
+        try {
+            const [customersRes, paymentsRes] = await Promise.all([
+                API.get(`/getcustomer?serviceId=${serviceId}`, getAuthHeaders()),
+                API.get(`/payments?month=${selectedMonth}`, getAuthHeaders())
+            ]);
+
+            const activeCustomers = customersRes.data.filter(c => c.serviceId === serviceId);
+
+            const currentPayments = paymentsRes.data;
+            const paymentMap = {};
+
+            currentPayments.forEach(payment => {
+                if (payment.customerId?._id) {
+                    paymentMap[payment.customerId._id] = payment;
+                }
+            });
+
+            const mergedData = activeCustomers.map(customer => {
+                const paymentRecord = paymentMap[customer._id];
+                if (paymentRecord) {
+                    const missed = paymentRecord.missedDays || 0;
+                    const baseAmount = customer.monthlyAmount || paymentRecord.amount;
+                    const dynamicAmount = paymentRecord.status === 'Paid'
+                        ? paymentRecord.amount
+                        : getDynamicAmount(baseAmount, missed, selectedMonth);
+
+                    return {
+                        ...customer,
+                        paymentId: paymentRecord._id,
+                        status: paymentRecord.status,
+                        paidDate: paymentRecord.paidDate,
+                        dailyStatus: paymentRecord.dailyStatus || [],
+                        missedDays: missed,
+                        amount: dynamicAmount
+                    };
+                }
+
+                return {
+                    ...customer,
+                    paymentId: null,
+                    status: 'No Record',
+                    paidDate: null,
+                    dailyStatus: [],
+                    missedDays: 0,
+                    amount: customer.monthlyAmount
+                };
+            });
+
+            setDashboardData(mergedData);
+        } catch (error) {
+            showToast("Failed to connect to the server.", "error");
+        }
+    };
+
+    useEffect(() => {
+        if (!token) {
+            navigate("/");
+            return;
+        }
+        fetchInitializedMonths();
+        fetchTemplates();
+    }, [token, navigate]);
+
+    useEffect(() => {
+        if (token && currentView === 'dashboard') {
+            localStorage.setItem("autoflow_selectedMonth", selectedMonth);
+            fetchDashboardData();
+        }
+    }, [selectedMonth, currentView, token]);
+
+    const getTodayStatus = (dailyStatusArray) => {
+        if (!dailyStatusArray || !Array.isArray(dailyStatusArray)) return null;
+        const today = new Date().toLocaleDateString('en-CA');
+        const record = dailyStatusArray.find(d => {
+            const recordDate = typeof d.date === 'string' ? d.date.split('T')[0] : d.date;
+            return recordDate === today;
+        });
+        return record ? record.status : null;
+    };
+
+    const filteredCustomers = dashboardData.filter(c => {
+        const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase());
+        let matchesStatus = true;
+        if (statusFilter === 'PAID') matchesStatus = c.status === 'Paid';
+        else if (statusFilter === 'PENDING') matchesStatus = c.status === 'Pending' || c.status === 'No Record';
+        return matchesSearch && matchesStatus;
+    });
+
+    const totalCustomers = dashboardData.length;
+    const expectedRevenue = dashboardData.reduce((sum, c) => sum + (c.amount || c.monthlyAmount || 0), 0);
+    const collectedRevenue = dashboardData.reduce((sum, c) => c.status === 'Paid' ? sum + (c.amount || 0) : sum, 0);
+    const pendingDues = dashboardData.reduce((sum, c) => (c.status === 'Pending' || c.status === 'No Record') ? sum + (c.amount || c.monthlyAmount || 0) : sum, 0);
+
+    // --- FORM HANDLERS ---
+    const handleInputChange = (e) => {
+        const { name, value } = e.target;
+        setFormData({ ...formData, [name]: value });
+    };
+
+    const resetForm = () => {
+        setIsModalOpen(false);
+        setEditingId(null);
+        setFormData({ name: '', phone: '', amount: '', gender: 'male' });
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        const payload = {
+            name: formData.name,
+            phone: formData.phone,
+            monthlyAmount: Number(formData.amount),
+            gender: formData.gender,
+            month: selectedMonth,
+            serviceId: serviceId
+        };
+
+        try {
+            if (editingId) {
+                await API.put(`/${editingId}`, payload, getAuthHeaders());
+                showToast("Customer updated successfully!", "success");
+            } else {
+                await API.post("/", payload, getAuthHeaders());
+                showToast("New customer added!", "success");
+            }
+            resetForm();
+            fetchDashboardData();
+        } catch (error) {
+            showToast(error.response?.data?.message || "Failed to save customer.", "error");
+        }
+    };
+
+    const handleEdit = (customer) => {
+        setFormData({
+            name: customer.name,
+            phone: customer.phone,
+            amount: customer.monthlyAmount,
+            gender: customer.gender || 'male'
+        });
+        setEditingId(customer._id);
+        setIsModalOpen(true);
+    };
+
+    const confirmDelete = (id) => {
+        setConfirmDialog({
+            isOpen: true,
+            title: "Deactivate Customer",
+            message: "Remove this customer? They will remain visible in past months where they already paid.",
+            type: "danger",
+            onConfirm: async () => {
+                setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+                try {
+                    await API.delete(`/${id}`, getAuthHeaders());
+                    fetchDashboardData();
+                    showToast("Customer deactivated.", "success");
+                } catch (error) {
+                    showToast("Failed to delete customer.", "error");
+                }
+            }
+        });
+    };
+
+    const confirmStartMonth = () => {
+        setConfirmDialog({
+            isOpen: true,
+            title: `Start ${selectedMonth}?`,
+            message: `This will generate pending records for all your active customers for ${selectedMonth}.`,
+            type: "primary",
+            onConfirm: async () => {
+                setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+                try {
+                    await API.post(`/start-month`, { month: selectedMonth, serviceId: serviceId }, getAuthHeaders());
+
+                    setInitializedMonths(prev => {
+                        if (!prev.includes(selectedMonth)) return [...prev, selectedMonth];
+                        return prev;
+                    });
+                    setIsMonthDropdownOpen(false);
+                    await fetchDashboardData();
+                    await fetchInitializedMonths();
+                    showToast(`${selectedMonth} activated!`, "success");
+                } catch (error) {
+                    showToast("Failed to start the new month.", "error");
+                }
+            }
+        });
+    };
+
+    const updateDailyStatus = async (paymentId, status) => {
+        if (!paymentId) return showToast("No payment record found. Please start the month first.", "error");
+        try {
+            const today = new Date().toLocaleDateString('en-CA');
+            await API.post(`/daily-status`, {
+                paymentId, date: today, status, month: selectedMonth
+            }, getAuthHeaders());
+            fetchDashboardData();
+            if (status === 'None') showToast("Action undone.", "success");
+            else showToast(`Marked as ${status}`, "success");
+        } catch (error) {
+            showToast("Failed to update status.", "error");
+        }
+    };
+
+    const togglePaymentStatus = async (paymentId) => {
+        if (!paymentId) return showToast("No payment record found for this month.", "error");
+        try {
+            await API.patch(`/payment/${paymentId}/toggle`, {}, getAuthHeaders());
+            fetchDashboardData();
+            showToast("Payment status updated!", "success");
+        } catch (error) {
+            showToast("Failed to update payment status.", "error");
+        }
+    };
+
+    const openHistory = async (customer) => {
+        setSelectedCustomer(customer);
+        setHistoryModalOpen(true);
+        try {
+            const res = await API.get(`/${customer._id}/history`, getAuthHeaders());
+            setCustomerHistory(res.data);
+            if (customer.paymentId) {
+                const paymentRes = await API.get(`/payment/${customer.paymentId}`, getAuthHeaders());
+                setSelectedPaymentDetails(paymentRes.data);
+            } else {
+                setSelectedPaymentDetails(null);
+            }
+        } catch (error) { }
+    };
+
+    const totalPaidBySelected = customerHistory
+        .filter(record => record.status === 'Paid')
+        .reduce((sum, record) => sum + record.amount, 0);
+
+    const handleSendWhatsApp = (customer, type) => {
+
+        const finalAmount = customer.amount || customer.monthlyAmount;
+        const missedDays = customer.missedDays || 0;
+        const { name, phone, gender, dailyStatus = [] } = customer;
+        const honorific = gender === 'female' ? " Ma'am" : " Sir";
+
+        const missedDates = dailyStatus
+            .filter(d => d.status === "Missed")
+            .map(d => new Date(d.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }))
+            .join(", ");
+
+        let rawTemplate = "";
+        if (type === 'request') rawTemplate = templates.requestTemplate;
+        else if (type === 'reminder') rawTemplate = templates.reminderTemplate;
+        else if (type === 'thankyou') rawTemplate = templates.thankyouTemplate;
+
+
+        const finalUpi = templates.upiId || "Not Provided";
+        const finalPhone = templates.phone || "Not Provided";
+
+
+        let message = rawTemplate
+            .replace(/{{name}}/g, `${name}${honorific}`)
+            .replace(/{{month}}/g, selectedMonth)
+            .replace(/{{missedDays}}/g, missedDays)
+            .replace(/{{missedDates}}/g, missedDates || "None")
+            .replace(/{{amount}}/g, finalAmount)
+            .replace(/{{upi}}/g, finalUpi)
+            .replace(/{{phone}}/g, finalPhone);
+
+
+        let cleanPhone = phone.toString().replace(/\D/g, '');
+        if (cleanPhone.length === 10) cleanPhone = '91' + cleanPhone;
+
+        const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+        window.open(whatsappUrl, '_blank');
+
+
+        setWaSentTracker(prev => ({ ...prev, [`${customer._id}-${type}`]: true }));
+    };
+
+    const StatusBadge = ({ status }) => {
+        if (status === 'Paid') return <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-100 uppercase tracking-wide">Paid</span>;
+        if (status === 'Pending') return <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-rose-50 text-rose-600 border border-rose-100 uppercase tracking-wide">Pending</span>;
+        return <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-600 border border-slate-200 uppercase tracking-wide">No Record</span>;
+    };
+
+
+    // ==========================================
+    // RENDER: GLOBAL HISTORY PAGE VIEW 
+    // ==========================================
+    if (currentView === 'history') {
+        return (
+            <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 font-sans flex flex-col w-full">
+                <div className="bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 sm:px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between sticky top-0 z-40 shadow-sm gap-3">
+                    <div className="flex items-center gap-3">
+                        <button onClick={() => setCurrentView('dashboard')} className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full transition-all duration-200 active:scale-95">
+                            <ArrowLeft size={20} strokeWidth={2.5} />
+                        </button>
+                        <div>
+                            <h1 className="text-lg sm:text-2xl font-extrabold text-slate-900 flex items-center gap-2">
+                                <Database className="text-indigo-600" size={22} />
+                                <span className="truncate">Global Ledger</span>
+                            </h1>
+                            <p className="text-[11px] sm:text-xs text-slate-500 font-medium hidden sm:block">Database history across all months</p>
+                        </div>
+                    </div>
+                    <div className="text-xs sm:text-sm bg-indigo-50 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full text-indigo-700 font-bold flex items-center gap-1 self-start sm:self-auto">
+                        <Database size={14} /> {globalHistoryData.length} Months
+                    </div>
+                </div>
+
+                <div className="flex-1 p-3 sm:p-5 lg:p-8 w-full max-w-full overflow-y-auto">
+                    {isHistoryLoading ? (
+                        <div className="flex flex-col items-center justify-center py-16 sm:py-24">
+                            <Clock className="mx-auto mb-4 text-indigo-400 animate-spin" size={40} />
+                            <p className="text-slate-500 font-bold">Loading ledger history...</p>
+                        </div>
+                    ) : globalHistoryData.length === 0 ? (
+                        <div className="text-center py-16 sm:py-24 bg-white rounded-2xl sm:rounded-3xl border border-slate-200 shadow-sm max-w-md mx-auto">
+                            <FileText className="mx-auto mb-3 text-slate-300" size={48} />
+                            <p className="text-slate-500 font-bold text-base sm:text-lg">No billing history found.</p>
+                            <button onClick={() => setCurrentView('dashboard')} className="mt-4 text-indigo-600 text-sm font-semibold underline">
+                                ← Back to Dashboard
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="flex flex-col gap-4 sm:gap-6 w-full max-w-6xl mx-auto">
+                            {globalHistoryData.map((data, idx) => {
+                                const isExpanded = expandedMonth === data.month;
+                                let displayedPayments = data.payments;
+                                if (isExpanded && monthSearchTerm) {
+                                    displayedPayments = data.payments.filter(p => p.customerId?.name?.toLowerCase().includes(monthSearchTerm.toLowerCase()) || p.customerId?.phone?.includes(monthSearchTerm));
+                                }
+
+                                return (
+                                    <div key={idx} className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-slate-200 overflow-hidden transition-all duration-200">
+                                        <button onClick={() => { setExpandedMonth(isExpanded ? null : data.month); setMonthSearchTerm(''); }} className="w-full text-left bg-gradient-to-r from-indigo-50/30 to-white hover:bg-indigo-50/50 p-4 sm:p-5 flex flex-col gap-3 transition-all">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-3 sm:gap-4">
+                                                    <div className="bg-white p-2 sm:p-3 rounded-xl shadow-sm border border-indigo-100 text-indigo-600"><CalendarDays size={18} className="sm:w-6 sm:h-6" /></div>
+                                                    <div className="text-left">
+                                                        <h2 className="text-lg sm:text-2xl font-black text-indigo-900">{data.month}</h2>
+                                                        <p className="text-[10px] sm:text-xs font-bold text-indigo-600">{data.payments.length} Customers Billed</p>
+                                                    </div>
+                                                </div>
+                                                <div className={`p-1.5 sm:p-2 rounded-xl transition-all ${isExpanded ? 'bg-indigo-600 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-400'}`}>
+                                                    {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-3 sm:gap-4 ml-12 sm:ml-16">
+                                                <div className="flex items-center gap-2 bg-emerald-50 px-3 py-1.5 rounded-lg">
+                                                    <CheckCircle2 size={14} className="text-emerald-600" />
+                                                    <span className="text-xs font-bold text-emerald-700">₹{data.collected}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2 bg-rose-50 px-3 py-1.5 rounded-lg">
+                                                    <Clock size={14} className="text-rose-600" />
+                                                    <span className="text-xs font-bold text-rose-700">₹{data.pending}</span>
+                                                </div>
+                                            </div>
+                                        </button>
+
+                                        {isExpanded && (
+                                            <div className="border-t border-slate-100 animate-in slide-in-from-top-2 duration-200">
+                                                <div className="p-3 sm:p-4 bg-slate-50/80 border-b border-slate-100">
+                                                    <div className="relative w-full">
+                                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                                        <input type="text" placeholder={`Search in ${data.month}...`} value={monthSearchTerm} onChange={(e) => setMonthSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-all bg-white" />
+                                                    </div>
+                                                </div>
+
+                                                <div className="hidden md:block overflow-x-auto">
+                                                    <table className="w-full text-left border-collapse min-w-[700px]">
+                                                        <thead className="bg-slate-50">
+                                                            <tr className="border-b border-slate-200">
+                                                                <th className="px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Customer Name</th>
+                                                                <th className="px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Phone</th>
+                                                                <th className="px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                                                                <th className="px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center">Missed Days</th>
+                                                                <th className="px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right">Final Amount</th>
+                                                                <th className="px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right">Paid Date</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-slate-100">
+                                                            {displayedPayments.length === 0 ? (
+                                                                <tr><td colSpan="6" className="px-5 py-10 text-center text-slate-500 font-medium">No customers match your search in {data.month}.</td></tr>
+                                                            ) : (
+                                                                displayedPayments.map((p, i) => (
+                                                                    <tr key={i} className="hover:bg-slate-50/60 transition-colors">
+                                                                        <td className="px-5 py-3.5 font-bold text-slate-800 text-sm">{p.customerId?.name || 'Unknown'}</td>
+                                                                        <td className="px-5 py-3.5 text-slate-600 text-xs font-mono">+91 {p.customerId?.phone || ''}</td>
+                                                                        <td className="px-5 py-3.5">{p.status === 'Paid' ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">Paid</span> : p.status === 'Pending' ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700">Pending</span> : <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">No Record</span>}</td>
+                                                                        <td className="px-5 py-3.5 text-center">{p.missedDays > 0 ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700">{p.missedDays} Days</span> : <span className="text-slate-300 text-sm">-</span>}</td>
+                                                                        <td className="px-5 py-3.5 text-right font-black text-slate-900">₹{p.amount}</td>
+                                                                        <td className="px-5 py-3.5 text-right text-xs font-semibold">{p.paidDate ? <span className="text-slate-600">{p.paidDate}</span> : <span className="text-rose-500">Unpaid</span>}</td>
+                                                                    </tr>
+                                                                ))
+                                                            )}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    }
+
+    // ==========================================
+    // RENDER: MAIN DASHBOARD VIEW
+    // ==========================================
+
+    return (
+        <div className="min-h-screen bg-slate-50 p-3 sm:p-5 lg:p-8 font-sans relative w-full flex flex-col overflow-x-hidden">
+
+            {/* Toast Notification */}
+            <div className={`fixed top-4 right-4 z-[70] transition-all duration-500 ease-out transform ${toast.show ? 'translate-x-0 opacity-100' : 'translate-x-32 opacity-0 pointer-events-none'}`}>
+                <div className={`flex items-center gap-2 sm:gap-3 px-3 py-2.5 sm:px-5 sm:py-4 rounded-xl sm:rounded-2xl shadow-xl border ${toast.type === 'error' ? 'bg-white border-rose-200' : 'bg-white border-emerald-200'}`}>
+                    {toast.type === 'error' ? (
+                        <div className="bg-rose-100 p-1.5 sm:p-2 rounded-full text-rose-600"><AlertTriangle size={16} className="sm:w-5 sm:h-5" /></div>
+                    ) : (
+                        <div className="bg-emerald-100 p-1.5 sm:p-2 rounded-full text-emerald-600"><CheckCircle2 size={16} className="sm:w-5 sm:h-5" /></div>
+                    )}
+                    <p className={`text-xs sm:text-sm font-bold ${toast.type === 'error' ? 'text-rose-900' : 'text-emerald-900'}`}>{toast.message}</p>
+                </div>
+            </div>
+
+            {/* Confirmation Modal */}
+            {confirmDialog.isOpen && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-[90%] sm:max-w-sm overflow-hidden">
+                        <div className="p-5 sm:p-6">
+                            <div className={`mx-auto flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-full mb-3 sm:mb-4 ${confirmDialog.type === 'danger' ? 'bg-rose-100' : 'bg-blue-100'}`}>
+                                {confirmDialog.type === 'danger' ? <AlertTriangle className="h-5 w-5 sm:h-6 sm:w-6 text-rose-600" /> : <CalendarDays className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />}
+                            </div>
+                            <div className="text-center">
+                                <h3 className="text-base sm:text-lg font-bold text-slate-900">{confirmDialog.title}</h3>
+                                <p className="text-xs sm:text-sm text-slate-500 mt-2">{confirmDialog.message}</p>
+                            </div>
+                        </div>
+                        <div className="bg-slate-50 px-4 py-3 sm:px-6 sm:py-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+                            <button onClick={() => setConfirmDialog({ ...confirmDialog, isOpen: false })} className="px-4 py-2 text-sm font-bold text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition-all">Cancel</button>
+                            <button onClick={confirmDialog.onConfirm} className={`px-4 py-2 text-sm font-bold text-white rounded-xl transition-all ${confirmDialog.type === 'danger' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-blue-600 hover:bg-blue-700'}`}>Confirm</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* HEADER */}
+            <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-5 lg:mb-8 gap-4 sm:gap-6 w-full">
+                <div className="min-w-0 flex-1 w-full">
+                    <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+                        <span className="text-blue-600 shrink-0 text-2xl sm:text-3xl">🚗</span>
+                        <span className="truncate block pb-1" title={workspaceName}>{workspaceName}</span>
+                    </h1>
+                    <p className="text-xs sm:text-sm text-slate-500 mt-0.5 font-medium">Powered by AutoFlow</p>
+                </div>
+
+                <div className="flex flex-wrap items-stretch sm:items-center gap-2 sm:gap-3 w-full xl:w-auto shrink-0">
+                    <div className="relative w-full sm:w-56" ref={dropdownRef}>
+                        <button onClick={() => setIsMonthDropdownOpen(!isMonthDropdownOpen)} className="w-full bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 px-3 py-2.5 rounded-xl font-bold shadow-sm transition-all flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <CalendarDays size={16} className="text-blue-600" />
+                                <div className="flex flex-col items-start leading-tight">
+                                    <span className="text-[9px] uppercase text-slate-500 font-semibold">Viewing</span>
+                                    <span className="text-sm">{selectedMonth}</span>
+                                </div>
+                            </div>
+                            <ChevronDown size={14} className={`text-slate-400 transition-transform ${isMonthDropdownOpen ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {isMonthDropdownOpen && (
+                            <div className="absolute right-0 sm:right-auto xl:right-0 mt-2 w-full sm:w-72 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden flex flex-col animate-in fade-in slide-in-from-top-2 duration-200">
+                                {!initializedMonths.includes(selectedMonth) ? (
+                                    <div className="p-3 bg-[#fdfaf3] border-b border-amber-100/50">
+                                        <button onClick={confirmStartMonth} className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-sm transition-all active:scale-95">
+                                            <Plus size={16} /> Start {selectedMonth}
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="p-3 bg-emerald-50 border-b border-emerald-100 flex items-center justify-center gap-2">
+                                        <div className="text-emerald-500 rounded-full border border-emerald-200 bg-white p-0.5">
+                                            <CheckCircle2 size={16} strokeWidth={3} />
+                                        </div>
+                                        <p className="text-sm font-bold text-emerald-800">{selectedMonth} activated!</p>
+                                    </div>
+                                )}
+
+                                <div className="max-h-60 overflow-y-auto p-2 space-y-1">
+                                    {availableMonths.map((month) => {
+                                        const isActivated = initializedMonths.includes(month);
+                                        const isSelected = selectedMonth === month;
+                                        return (
+                                            <button
+                                                key={month}
+                                                onClick={() => { setSelectedMonth(month); setIsMonthDropdownOpen(false); }}
+                                                className={`w-full flex items-center justify-between px-3 py-2.5 text-sm rounded-xl transition-all ${isSelected ? 'bg-blue-50 text-blue-900 font-bold' : 'text-slate-600 hover:bg-slate-50 font-medium'}`}
+                                            >
+                                                <span>{month}</span>
+                                                {isActivated ? (
+                                                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100/50 text-emerald-700 font-bold">Active</span>
+                                                ) : (
+                                                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-400 font-semibold">Inactive</span>
+                                                )}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="flex items-stretch gap-2 w-full sm:w-auto">
+                        <button onClick={navigateToGlobalHistory} className="flex-1 sm:flex-none bg-slate-800 hover:bg-slate-900 text-white px-4 py-2.5 rounded-xl font-medium transition-all active:scale-95 flex items-center justify-center gap-2 text-sm shadow-sm">
+                            <Database size={16} /> <span className="hidden sm:inline">Global</span> History
+                        </button>
+
+                        <button onClick={() => setIsModalOpen(true)} className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-medium shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 text-sm">
+                            <Users size={16} /> Add <span className="hidden sm:inline">Customer</span>
+                        </button>
+
+                        {/* --- NEW TEMPLATE BUTTON --- */}
+                        <button onClick={() => setIsTemplateModalOpen(true)} className="shrink-0 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 px-3 py-2.5 rounded-xl font-medium transition-all active:scale-95 flex items-center justify-center shadow-sm" title="WhatsApp Templates">
+                            <Settings size={18} className="text-slate-500" />
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Stats Grid */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6 mb-5 lg:mb-8">
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <div className="flex items-center gap-2 mb-1">
+                        <div className="bg-blue-50 p-1.5 rounded-lg text-blue-600"><Users size={14} /></div>
+                        <h2 className="text-[10px] font-bold text-slate-500 uppercase">Customers</h2>
+                    </div>
+                    <p className="text-xl sm:text-2xl font-extrabold text-slate-900">{totalCustomers}</p>
+                </div>
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <div className="flex items-center gap-2 mb-1">
+                        <div className="bg-slate-50 p-1.5 rounded-lg text-slate-600"><IndianRupee size={14} /></div>
+                        <h2 className="text-[10px] font-bold text-slate-500 uppercase">Expected</h2>
+                    </div>
+                    <p className="text-xl sm:text-2xl font-extrabold text-slate-900">₹{expectedRevenue}</p>
+                </div>
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-emerald-100 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-2 opacity-5"><CheckCircle2 size={40} /></div>
+                    <div className="flex items-center gap-2 mb-1 relative">
+                        <div className="bg-emerald-50 p-1.5 rounded-lg text-emerald-600"><CheckCircle2 size={14} /></div>
+                        <h2 className="text-[10px] font-bold text-emerald-700 uppercase">Collected</h2>
+                    </div>
+                    <p className="text-xl sm:text-2xl font-extrabold text-emerald-700 relative">₹{collectedRevenue}</p>
+                </div>
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-rose-100 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-2 opacity-5"><AlertCircle size={40} /></div>
+                    <div className="flex items-center gap-2 mb-1 relative">
+                        <div className="bg-rose-50 p-1.5 rounded-lg text-rose-600"><Clock size={14} /></div>
+                        <h2 className="text-[10px] font-bold text-rose-700 uppercase">Pending</h2>
+                    </div>
+                    <p className="text-xl sm:text-2xl font-extrabold text-rose-600 relative">₹{pendingDues}</p>
+                </div>
+            </div>
+
+            {/* Main Table/Card Area */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 w-full overflow-hidden flex flex-col flex-1">
+                <div className="px-4 py-3 border-b border-slate-100 flex flex-col sm:flex-row sm:justify-between sm:items-center bg-slate-50/50 gap-3">
+                    <h2 className="text-base font-bold text-slate-900">Active Subscriptions</h2>
+                    <div className="flex gap-2 w-full sm:w-auto">
+                        <div className="relative w-full sm:w-64">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                            <input type="text" placeholder="Search by name..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                        </div>
+                        <div className="relative">
+                            <button onClick={() => { if (statusFilter === 'ALL') setStatusFilter('PAID'); else if (statusFilter === 'PAID') setStatusFilter('PENDING'); else setStatusFilter('ALL'); }} className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all border ${statusFilter === 'ALL' ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50' : statusFilter === 'PAID' ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100' : 'bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100'}`}>
+                                {statusFilter === 'ALL' ? <Filter size={16} /> : statusFilter === 'PAID' ? <CheckCircle2 size={16} /> : <Clock size={16} />}
+                                <span className="hidden sm:inline">{statusFilter === 'ALL' ? 'All Status' : statusFilter === 'PAID' ? 'Paid Only' : 'Pending Only'}</span>
+                                <span className="sm:hidden">{statusFilter === 'ALL' ? 'All' : statusFilter === 'PAID' ? 'Paid' : 'Pending'}</span>
+                                {statusFilter !== 'ALL' && <button onClick={(e) => { e.stopPropagation(); setStatusFilter('ALL'); }} className="ml-1 p-0.5 rounded-full hover:bg-white/50"><X size={12} /></button>}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                {filteredCustomers.length === 0 ? (
+                    <div className="p-8 sm:p-12 flex flex-col items-center justify-center text-center">
+                        <div className="bg-slate-100 p-4 rounded-full mb-3 text-slate-400"><Users size={28} /></div>
+                        <h3 className="text-slate-900 font-bold text-base mb-1">No customers found</h3>
+                        <p className="text-slate-500 text-sm">Try changing your search or filter criteria</p>
+                    </div>
+                ) : (
+                    <>
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:hidden gap-4 p-4 sm:p-6 bg-slate-50/50">
+                            {filteredCustomers.map((c) => {
+                                const todayStatus = getTodayStatus(c.dailyStatus);
+                                const hasActionToday = todayStatus === 'Cleaned' || todayStatus === 'Missed';
+                                const missedDatesList = c.dailyStatus?.filter(d => d.status === "Missed").map(d => new Date(d.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })) || [];
+
+                                return (
+                                    <div key={c._id} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col gap-4">
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <h3 className="font-extrabold text-slate-900 text-lg leading-tight">{c.name}</h3>
+                                                <p className="text-slate-500 text-sm font-medium mt-1">+91 {c.phone}</p>
+                                            </div>
+                                            <div className="flex flex-col items-end gap-1.5">
+                                                <p className="font-black text-slate-900 text-xl">₹{c.amount || c.monthlyAmount}</p>
+                                                <StatusBadge status={c.status} />
+                                            </div>
+                                        </div>
+
+                                        {c.paymentId && (
+                                            <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                                                <div className="flex flex-col mb-2">
+                                                    <div className="flex justify-between items-center w-full">
+                                                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Daily Service</span>
+                                                        {c.missedDays > 0 && <span className="bg-rose-100 text-rose-700 px-2 py-0.5 rounded text-[10px] font-bold">Missed: {c.missedDays}</span>}
+                                                    </div>
+
+                                                    {missedDatesList.length > 0 && (
+                                                        <div className="flex flex-wrap gap-1 mt-2">
+                                                            {missedDatesList.slice(0, 4).map((date, idx) => (
+                                                                <span key={idx} className="bg-rose-50 text-rose-600 border border-rose-100 px-1.5 py-0.5 rounded text-[9px] font-bold">
+                                                                    {date}
+                                                                </span>
+                                                            ))}
+                                                            {missedDatesList.length > 4 && (
+                                                                <span className="text-[10px] text-slate-400 font-medium px-1 flex items-center">
+                                                                    +{missedDatesList.length - 4} more
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {hasActionToday ? (
+                                                    <div className="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-slate-200 mt-2">
+                                                        <span className={`text-sm font-bold flex items-center gap-1 ${todayStatus === 'Cleaned' ? 'text-emerald-600' : 'text-rose-600'}`}><CheckCircle2 size={16} /> {todayStatus} Today</span>
+                                                        <button onClick={() => updateDailyStatus(c.paymentId, "None")} className="text-slate-400 hover:text-slate-600 text-xs font-bold px-2 py-1 bg-slate-100 rounded-md">Undo</button>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex gap-2 mt-2">
+                                                        <button onClick={() => updateDailyStatus(c.paymentId, "Cleaned")} className="flex-1 py-2.5 bg-white border border-emerald-200 hover:bg-emerald-50 text-emerald-700 rounded-lg text-sm font-bold shadow-sm transition-all flex items-center justify-center gap-1">✨ Clean</button>
+                                                        <button onClick={() => updateDailyStatus(c.paymentId, "Missed")} className="flex-1 py-2.5 bg-white border border-rose-200 hover:bg-rose-50 text-rose-700 rounded-lg text-sm font-bold shadow-sm transition-all flex items-center justify-center gap-1">❌ Miss</button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        <div className="space-y-3 pt-1">
+                                            {c.paymentId && (
+                                                <button onClick={() => togglePaymentStatus(c.paymentId)} className={`w-full py-2.5 rounded-xl text-sm font-black transition-all shadow-sm flex justify-center items-center gap-2 ${c.status === 'Pending' ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-amber-100 hover:bg-amber-200 text-amber-800'}`}>
+                                                    {c.status === 'Pending' ? <><CheckCircle2 size={18} /> Mark as Paid</> : <><AlertCircle size={18} /> Revert to Pending</>}
+                                                </button>
+                                            )}
+                                            <div className="flex gap-2">
+                                                {c.status === 'Paid' ? (
+                                                    <button onClick={() => handleSendWhatsApp(c, 'thankyou')} className={`flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${waSentTracker[`${c._id}-thankyou`] ? 'bg-teal-100 text-teal-800 border border-teal-200' : 'bg-teal-50 text-teal-700 border border-teal-100 hover:bg-teal-100'}`}><MessageCircle size={18} /> {waSentTracker[`${c._id}-thankyou`] ? 'Thanks Sent ✓' : 'Send Thanks'}</button>
+                                                ) : (
+                                                    <>
+                                                        <button onClick={() => handleSendWhatsApp(c, 'request')} className={`flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${waSentTracker[`${c._id}-request`] ? 'bg-blue-100 text-blue-800 border border-blue-200' : 'bg-blue-50 text-blue-700 border border-blue-100 hover:bg-blue-100'}`}><MessageCircle size={18} /> {waSentTracker[`${c._id}-request`] ? 'Bill Sent ✓' : 'Send Bill'}</button>
+                                                        <button onClick={() => handleSendWhatsApp(c, 'reminder')} className={`flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${waSentTracker[`${c._id}-reminder`] ? 'bg-rose-100 text-rose-800 border border-rose-200' : 'bg-rose-50 text-rose-700 border border-rose-100 hover:bg-rose-100'}`}><AlertCircle size={18} /> {waSentTracker[`${c._id}-reminder`] ? 'Reminded ✓' : 'Reminder'}</button>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="flex justify-between items-center pt-3 border-t border-slate-100 mt-1">
+                                            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Manage Profile</span>
+                                            <div className="flex gap-2">
+                                                <button onClick={() => openHistory(c)} className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-500 rounded-lg transition-colors"><History size={16} /></button>
+                                                <button onClick={() => handleEdit(c)} className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-500 rounded-lg transition-colors"><Edit size={16} /></button>
+                                                <button onClick={() => confirmDelete(c._id)} className="p-2 bg-rose-50 hover:bg-rose-100 text-rose-500 rounded-lg transition-colors"><Trash2 size={16} /></button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </div>
+
+                        <div className="hidden xl:block overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
+                                <thead className="bg-slate-50 sticky top-0">
+                                    <tr className="border-b border-slate-200">
+                                        <th className="px-5 py-3 text-[10px] font-bold text-slate-500 uppercase">Customer</th>
+                                        <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase">Phone</th>
+                                        <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase">Amount</th>
+                                        <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase">Status</th>
+                                        <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase text-center">Daily</th>
+                                        <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase text-center">Missed Days</th>
+                                        <th className="px-5 py-3 text-[10px] font-bold text-slate-500 uppercase text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {filteredCustomers.map((c) => {
+                                        const todayStatus = getTodayStatus(c.dailyStatus);
+                                        const hasActionToday = todayStatus === 'Cleaned' || todayStatus === 'Missed';
+                                        const missedDatesList = c.dailyStatus?.filter(d => d.status === "Missed").map(d => new Date(d.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })) || [];
+
+                                        return (
+                                            <tr key={c._id} className="hover:bg-slate-50/50">
+                                                <td className="px-5 py-3">
+                                                    <div className="font-bold text-slate-800 text-sm">{c.name}</div>
+                                                    <div className="text-[9px] text-slate-400">{c.gender?.charAt(0).toUpperCase() || 'M'}</div>
+                                                </td>
+                                                <td className="px-4 py-3 text-slate-600 text-sm">+91 {c.phone}</td>
+                                                <td className="px-4 py-3 font-black text-slate-900">₹{c.amount || c.monthlyAmount}</td>
+                                                <td className="px-4 py-3"><StatusBadge status={c.status} /></td>
+                                                <td className="px-4 py-3">
+                                                    {c.paymentId ? (
+                                                        hasActionToday ? (
+                                                            <div className="flex items-center justify-center gap-1">
+                                                                <span className={`px-2 py-1 rounded text-[10px] font-bold ${todayStatus === 'Cleaned' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>{todayStatus}</span>
+                                                                <button onClick={() => updateDailyStatus(c.paymentId, "None")} className="p-1 text-slate-400"><Trash2 size={12} /></button>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex gap-1 justify-center">
+                                                                <button onClick={() => updateDailyStatus(c.paymentId, "Cleaned")} className="px-2 py-1 bg-slate-100 rounded text-[10px] font-bold">Clean</button>
+                                                                <button onClick={() => updateDailyStatus(c.paymentId, "Missed")} className="px-2 py-1 bg-slate-100 rounded text-[10px] font-bold">Miss</button>
+                                                            </div>
+                                                        )
+                                                    ) : <span className="text-slate-400 text-[10px]">No record</span>}
+                                                </td>
+                                                <td className="px-4 py-3 text-center">
+                                                    {c.missedDays > 0 ? (
+                                                        <div className="flex flex-col items-center gap-1">
+                                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700">{c.missedDays} days</span>
+                                                            <span className="text-[9px] text-slate-500 font-medium max-w-[120px] truncate" title={missedDatesList.join(', ')}>
+                                                                {missedDatesList.join(', ')}
+                                                            </span>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-slate-300 text-xs">—</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-5 py-3 text-right">
+                                                    <div className="flex items-center justify-end gap-1.5">
+                                                        {c.paymentId && (
+                                                            <button onClick={() => togglePaymentStatus(c.paymentId)} className="px-2 py-1.5 text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded transition-colors mr-1">
+                                                                {c.status === 'Pending' ? 'Mark Paid' : 'Mark Pending'}
+                                                            </button>
+                                                        )}
+                                                        {c.status === 'Paid' ? (
+                                                            <button onClick={() => handleSendWhatsApp(c, 'thankyou')} className="p-1.5 text-teal-600 hover:bg-teal-50 rounded transition-colors relative" title="Send Thank You">
+                                                                <MessageCircle size={16} />{waSentTracker[`${c._id}-thankyou`] && <CheckCircle2 size={10} className="absolute -top-1 -right-1 text-teal-600 bg-white rounded-full" />}
+                                                            </button>
+                                                        ) : (
+                                                            <>
+                                                                <button onClick={() => handleSendWhatsApp(c, 'request')} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors relative" title="Send Bill">
+                                                                    <MessageCircle size={16} />{waSentTracker[`${c._id}-request`] && <CheckCircle2 size={10} className="absolute -top-1 -right-1 text-blue-600 bg-white rounded-full" />}
+                                                                </button>
+                                                                <button onClick={() => handleSendWhatsApp(c, 'reminder')} className="p-1.5 text-rose-500 hover:bg-rose-50 rounded transition-colors relative" title="Send Reminder">
+                                                                    <AlertCircle size={16} />{waSentTracker[`${c._id}-reminder`] && <CheckCircle2 size={10} className="absolute -top-1 -right-1 text-rose-600 bg-white rounded-full" />}
+                                                                </button>
+                                                            </>
+                                                        )}
+                                                        <div className="w-px h-5 bg-slate-200 mx-1"></div>
+                                                        <button onClick={() => openHistory(c)} className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors"><History size={16} /></button>
+                                                        <button onClick={() => handleEdit(c)} className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors"><Edit size={16} /></button>
+                                                        <button onClick={() => confirmDelete(c._id)} className="p-1.5 text-rose-400 hover:text-rose-600 transition-colors"><Trash2 size={16} /></button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </>
+                )}
+            </div>
+
+            {/* Customer Add/Edit Modal */}
+            {isModalOpen && (
+                <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl w-full max-w-[90%] sm:max-w-md overflow-hidden max-h-[90vh] flex flex-col">
+                        <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center shrink-0">
+                            <h3 className="text-lg font-bold text-slate-900">{editingId ? "Edit Customer" : "Add Customer"}</h3>
+                            <button onClick={resetForm} className="p-1 hover:bg-slate-100 rounded-full"><X size={18} /></button>
+                        </div>
+                        <div className="overflow-y-auto custom-scrollbar p-5">
+                            <form onSubmit={handleSubmit} className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-semibold text-slate-700 mb-1">Name</label>
+                                    <input type="text" name="name" value={formData.name} onChange={handleInputChange} className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" required />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-sm font-semibold text-slate-700 mb-1">Monthly Amount (₹)</label>
+                                        <input type="number" name="amount" value={formData.amount} onChange={handleInputChange} className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" required />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold text-slate-700 mb-1">Gender</label>
+                                        <select name="gender" value={formData.gender} onChange={handleInputChange} className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm outline-none">
+                                            <option value="male">Male (Sir)</option>
+                                            <option value="female">Female (Ma'am)</option>
+                                            <option value="other">Other</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-semibold text-slate-700 mb-1">Phone</label>
+                                    <div className="flex border border-slate-300 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500">
+                                        <span className="px-3 py-2.5 bg-slate-50 text-slate-500 text-sm border-r">+91</span>
+                                        <input type="tel" name="phone" value={formData.phone} onChange={handleInputChange} className="flex-1 px-3 py-2.5 text-sm outline-none" required />
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-3 pt-2">
+                                    <button type="button" onClick={resetForm} className="flex-1 py-2.5 text-slate-700 bg-white border border-slate-300 rounded-xl font-bold text-sm">Cancel</button>
+                                    <button type="submit" className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2"><Save size={16} /> {editingId ? 'Update' : 'Save'}</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* History Modal */}
+            {historyModalOpen && selectedCustomer && (
+                <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl w-full max-w-[90%] sm:max-w-md overflow-hidden max-h-[80vh]">
+                        <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                            <div>
+                                <h3 className="font-bold text-slate-900">Payment History</h3>
+                                <p className="text-sm text-slate-500">{selectedCustomer.name}</p>
+                            </div>
+                            <button onClick={() => setHistoryModalOpen(false)} className="p-1 hover:bg-slate-200 rounded-full"><X size={18} /></button>
+                        </div>
+                        <div className="p-4 bg-indigo-50 flex justify-between">
+                            <span className="font-bold text-indigo-800">Total Collected:</span>
+                            <span className="font-black text-indigo-600">₹{totalPaidBySelected}</span>
+                        </div>
+                        <div className="p-4 overflow-y-auto max-h-[50vh]">
+                            {customerHistory.length === 0 ? (
+                                <p className="text-center text-slate-500 py-6">No payment history.</p>
+                            ) : (
+                                <ul className="space-y-2">
+                                    {customerHistory.map((record) => (
+                                        <li key={record._id} className="p-3 rounded-xl border border-slate-100 bg-slate-50">
+                                            <div className="flex justify-between items-center">
+                                                <div className="flex items-center gap-2">
+                                                    {record.status === 'Paid' ? <CheckCircle2 size={14} className="text-emerald-600" /> : <AlertCircle size={14} className="text-rose-600" />}
+                                                    <span className="font-bold text-slate-800">{record.month}</span>
+                                                </div>
+                                                <span className={`font-black ${record.status === 'Paid' ? 'text-emerald-600' : 'text-rose-600'}`}>₹{record.amount}</span>
+                                            </div>
+                                            {record.paidDate && <p className="text-xs text-slate-400 ml-6 mt-1">Paid: {record.paidDate}</p>}
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                        <div className="p-4 border-t border-slate-100">
+                            <button onClick={() => setHistoryModalOpen(false)} className="w-full py-2.5 text-slate-700 bg-white border border-slate-300 rounded-xl font-bold">Close</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* --- NEW: CUSTOMIZE WHATSAPP TEMPLATES MODAL --- */}
+            {isTemplateModalOpen && (
+                <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl w-full max-w-[90%] sm:max-w-2xl overflow-hidden max-h-[90vh] flex flex-col shadow-2xl">
+                        <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                            <div className="flex items-center gap-3">
+                                <div className="bg-white p-2 border border-slate-200 rounded-lg">
+                                    <MessageCircle size={18} className="text-emerald-600" />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-bold text-slate-900 leading-tight">WhatsApp Templates</h3>
+                                    <p className="text-xs text-slate-500 font-medium mt-0.5">Customize your auto-generated messages safely</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setIsTemplateModalOpen(false)} className="p-1 hover:bg-slate-200 text-slate-500 rounded-full transition-colors"><X size={18} /></button>
+                        </div>
+
+                        <div className="overflow-y-auto custom-scrollbar p-5">
+                            <form id="templateForm" onSubmit={saveTemplatesToDB} className="space-y-6">
+                                {/* Helper Text */}
+                                <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 flex flex-col gap-2">
+                                    <span className="text-xs font-bold text-blue-800 uppercase tracking-wide">Available Variables</span>
+                                    <p className="text-[11px] text-blue-600">Include these exactly as written below, and the system will automatically fill them in with real data!</p>
+                                    <div className="flex flex-wrap gap-1.5 mt-1">
+                                        {['{{name}}', '{{amount}}', '{{month}}', '{{missedDays}}', '{{missedDates}}', '{{upi}}', '{{phone}}'].map(v => (
+                                            <span key={v} className="bg-white text-blue-700 border border-blue-200 px-2 py-0.5 rounded text-[10px] font-mono shadow-sm">{v}</span>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+                                    {/* Unified Credentials Block */}
+                                    <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 items-center bg-white border border-slate-200 p-4 rounded-xl shadow-sm">
+                                        <div>
+                                            <label className="block text-sm font-semibold text-slate-700 mb-1">Your Custom UPI ID</label>
+                                            <input type="text" name="upiId" value={templates.upiId} onChange={handleTemplateChange} className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none" placeholder="example@upi" required />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-semibold text-slate-700 mb-1">Your Phone</label>
+                                            <input type="text" name="phone" value={templates.phone} onChange={handleTemplateChange} className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none" placeholder="9876543210" required />
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-1">
+                                            <FileText size={14} className="text-blue-500" /> Request Bill Template
+                                        </label>
+                                        <textarea name="requestTemplate" rows="10" value={templates.requestTemplate} onChange={handleTemplateChange} className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none resize-none custom-scrollbar" required />
+                                    </div>
+
+                                    <div>
+                                        <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-1">
+                                            <AlertCircle size={14} className="text-rose-500" /> Reminder Template
+                                        </label>
+                                        <textarea name="reminderTemplate" rows="10" value={templates.reminderTemplate} onChange={handleTemplateChange} className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 outline-none resize-none custom-scrollbar" required />
+                                    </div>
+
+                                    <div className="md:col-span-2">
+                                        <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-1">
+                                            <CheckCircle2 size={14} className="text-teal-500" /> Thank You Template
+                                        </label>
+                                        <textarea name="thankyouTemplate" rows="4" value={templates.thankyouTemplate} onChange={handleTemplateChange} className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none resize-none custom-scrollbar" required />
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                        <div className="px-5 py-4 border-t border-slate-100 flex gap-3 bg-white shrink-0">
+                            <button type="button" onClick={() => setIsTemplateModalOpen(false)} className="flex-1 py-2.5 text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl font-bold text-sm transition-colors">Cancel</button>
+                            <button type="submit" form="templateForm" className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm transition-all active:scale-95"><Save size={16} /> Save Templates</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+        </div>
+    );
+};
+
+export default Dashboard;
