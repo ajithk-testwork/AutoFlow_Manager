@@ -12,10 +12,10 @@ export const register = async (req, res) => {
          email,
          whatsapp,
          password,
-         upiId,
-       
+         upiId
       } = req.body;
 
+      // CHECK EXISTING USER
       const existing = await Client.findOne({ email });
 
       if (existing) {
@@ -24,25 +24,28 @@ export const register = async (req, res) => {
          });
       }
 
+      // HASH PASSWORD
       const hashedPassword = await bcrypt.hash(password, 10);
 
-     const client = await Client.create({
+      // CREATE CLIENT
+      const client = await Client.create({
          businessName,
          ownerName,
          email,
          whatsapp,
          upiId,
-         qrCode,
          password: hashedPassword
       });
 
-     
-
+      // SUCCESS RESPONSE
       res.status(201).json({
-         message: "Account created"
+         message: "Account created successfully",
+         client
       });
 
    } catch (error) {
+
+      console.log(error);
 
       res.status(500).json({
          message: "Register failed"
@@ -51,7 +54,6 @@ export const register = async (req, res) => {
    }
 
 };
-
 
 export const login = async (req, res) => {
 
