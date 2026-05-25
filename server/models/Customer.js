@@ -29,6 +29,11 @@ const customerSchema = new mongoose.Schema({
     default: ""
   },
 
+  vehicleName: {
+    type: String,
+    default: ""
+  },
+
   monthlyAmount: {
     type: Number,
     required: true

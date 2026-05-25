@@ -50,7 +50,7 @@ export const getCustomerHistory = async (
 
       .populate(
         "customerId",
-        "name phone doorNumber  monthlyAmount"
+        "name phone doorNumber vehicleName  monthlyAmount"
       )
 
       .sort({
@@ -245,7 +245,7 @@ export const getPaymentsByMonth = async (
 
       .populate(
         "customerId",
-        "name phone monthlyAmount gender isActive"
+        "name phone doorNumber vehicleName monthlyAmount gender isActive"
       );
 
     res.json(payments);
@@ -526,6 +526,7 @@ export const updateCustomer = async (
       name,
       phone,
       doorNumber,
+      vehicleName,
       monthlyAmount,
       gender,
       month
@@ -544,6 +545,7 @@ export const updateCustomer = async (
           name,
           phone,
           doorNumber,
+          vehicleName,
           monthlyAmount,
           gender
         },
@@ -621,53 +623,53 @@ export const updateCustomer = async (
 };
 
 export const getGlobalHistory = async (req, res) => {
-    try {
-        const { serviceId } = req.query; 
+  try {
+    const { serviceId } = req.query;
 
-        // 1. Find customers only in this specific workspace
-        const customersInService = await Customer.find({ 
-            tenantId: req.user.tenantId, 
-            serviceId: serviceId 
-        });
-        
-        const customerIds = customersInService.map(c => c._id);
+    // 1. Find customers only in this specific workspace
+    const customersInService = await Customer.find({
+      tenantId: req.user.tenantId,
+      serviceId: serviceId
+    });
 
-        // 2. Fetch the raw payment data for these customers
-        const payments = await Payment.find({
-            customerId: { $in: customerIds }
-        }).populate('customerId');
+    const customerIds = customersInService.map(c => c._id);
 
-        // 3. THE MISSING LOGIC: Group the payments by month so the frontend can read it
-        const groupedHistory = {};
+    // 2. Fetch the raw payment data for these customers
+    const payments = await Payment.find({
+      customerId: { $in: customerIds }
+    }).populate('customerId');
 
-        payments.forEach((payment) => {
-            // If the month doesn't exist in our list yet, create it
-            if (!groupedHistory[payment.month]) {
-                groupedHistory[payment.month] = {
-                    month: payment.month,
-                    collected: 0,
-                    pending: 0,
-                    payments: []
-                };
-            }
+    // 3. THE MISSING LOGIC: Group the payments by month so the frontend can read it
+    const groupedHistory = {};
 
-            // Add the payment to this month's list
-            groupedHistory[payment.month].payments.push(payment);
+    payments.forEach((payment) => {
+      // If the month doesn't exist in our list yet, create it
+      if (!groupedHistory[payment.month]) {
+        groupedHistory[payment.month] = {
+          month: payment.month,
+          collected: 0,
+          pending: 0,
+          payments: []
+        };
+      }
 
-            // Add to the total collected or pending amounts
-            if (payment.status === "Paid") {
-                groupedHistory[payment.month].collected += payment.amount;
-            } else {
-                groupedHistory[payment.month].pending += payment.amount;
-            }
-        });
+      // Add the payment to this month's list
+      groupedHistory[payment.month].payments.push(payment);
 
-        // 4. Convert our grouped object into a clean array and send it to the frontend
-        const result = Object.values(groupedHistory);
-        res.json(result);
+      // Add to the total collected or pending amounts
+      if (payment.status === "Paid") {
+        groupedHistory[payment.month].collected += payment.amount;
+      } else {
+        groupedHistory[payment.month].pending += payment.amount;
+      }
+    });
 
-    } catch (error) {
-        console.error("Global History Error:", error);
-        res.status(500).json({ message: "Failed to fetch global history" });
-    }
+    // 4. Convert our grouped object into a clean array and send it to the frontend
+    const result = Object.values(groupedHistory);
+    res.json(result);
+
+  } catch (error) {
+    console.error("Global History Error:", error);
+    res.status(500).json({ message: "Failed to fetch global history" });
+  }
 };
