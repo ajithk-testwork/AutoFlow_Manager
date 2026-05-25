@@ -50,7 +50,7 @@ export const getCustomerHistory = async (
 
       .populate(
         "customerId",
-        "name phone monthlyAmount"
+        "name phone doorNumber  monthlyAmount"
       )
 
       .sort({
@@ -525,6 +525,7 @@ export const updateCustomer = async (
     const {
       name,
       phone,
+      doorNumber,
       monthlyAmount,
       gender,
       month
@@ -542,6 +543,7 @@ export const updateCustomer = async (
         {
           name,
           phone,
+          doorNumber,
           monthlyAmount,
           gender
         },

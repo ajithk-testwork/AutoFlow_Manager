@@ -10,7 +10,8 @@ const customerSchema = new mongoose.Schema({
 
   serviceId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "Service"
+    ref: "Service",
+    required: true
   },
 
   name: {
@@ -21,6 +22,11 @@ const customerSchema = new mongoose.Schema({
   phone: {
     type: String,
     required: true
+  },
+
+  doorNumber: {
+    type: String,
+    default: ""
   },
 
   monthlyAmount: {
@@ -36,12 +42,7 @@ const customerSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
-  },
-  serviceId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Service',
-    required: true 
-},
+  }
 
 }, { timestamps: true });
 
