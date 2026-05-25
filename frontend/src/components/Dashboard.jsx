@@ -83,7 +83,7 @@ const Dashboard = () => {
     const [initializedMonths, setInitializedMonths] = useState([]);
 
     const [formData, setFormData] = useState({
-        name: '', phone: '', amount: '', gender: 'male'
+        name: '', phone: '', doorNumber: '', amount: '', gender: 'male'
     });
 
     const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
@@ -320,7 +320,7 @@ const Dashboard = () => {
     const resetForm = () => {
         setIsModalOpen(false);
         setEditingId(null);
-        setFormData({ name: '', phone: '', amount: '', gender: 'male' });
+        setFormData({ name: '', phone: '', doorNumber: '', amount: '', gender: 'male' });
     };
 
     const handleSubmit = async (e) => {
@@ -328,6 +328,7 @@ const Dashboard = () => {
         const payload = {
             name: formData.name,
             phone: formData.phone,
+            doorNumber: formData.doorNumber,
             monthlyAmount: Number(formData.amount),
             gender: formData.gender,
             month: selectedMonth,
@@ -353,6 +354,7 @@ const Dashboard = () => {
         setFormData({
             name: customer.name,
             phone: customer.phone,
+            doorNumber: customer.doorNumber || '',
             amount: customer.monthlyAmount,
             gender: customer.gender || 'male'
         });
@@ -817,7 +819,9 @@ const Dashboard = () => {
                                     <div key={c._id} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col gap-4">
                                         <div className="flex justify-between items-start">
                                             <div>
-                                                <h3 className="font-extrabold text-slate-900 text-lg leading-tight">{c.name}</h3>
+                                                <h3 className="font-extrabold text-slate-900 text-lg leading-tight">
+                                                    {c.name} {c.doorNumber && <span className="text-slate-500 text-sm font-bold ml-1">({c.doorNumber})</span>}
+                                                </h3>
                                                 <p className="text-slate-500 text-sm font-medium mt-1">+91 {c.phone}</p>
                                             </div>
                                             <div className="flex flex-col items-end gap-1.5">
@@ -917,8 +921,12 @@ const Dashboard = () => {
                                         return (
                                             <tr key={c._id} className="hover:bg-slate-50/50">
                                                 <td className="px-5 py-3">
-                                                    <div className="font-bold text-slate-800 text-sm">{c.name}</div>
-                                                    <div className="text-[9px] text-slate-400">{c.gender?.charAt(0).toUpperCase() || 'M'}</div>
+                                                    <div className="font-bold text-slate-800 text-sm">
+                                                        {c.name} {c.doorNumber && <span className="text-slate-500 font-medium ml-1">({c.doorNumber})</span>}
+                                                    </div>
+                                                    <div className="text-[10px] text-slate-400 mt-0.5">
+                                                        {c.gender?.charAt(0).toUpperCase() || 'M'}
+                                                    </div>
                                                 </td>
                                                 <td className="px-4 py-3 text-slate-600 text-sm">+91 {c.phone}</td>
                                                 <td className="px-4 py-3 font-black text-slate-900">₹{c.amount || c.monthlyAmount}</td>
@@ -1000,6 +1008,12 @@ const Dashboard = () => {
                                 <div>
                                     <label className="block text-sm font-semibold text-slate-700 mb-1">Name</label>
                                     <input type="text" name="name" value={formData.name} onChange={handleInputChange} className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" required />
+                                </div>
+                                
+                                {/* NEW DOOR NUMBER INPUT */}
+                                <div>
+                                    <label className="block text-sm font-semibold text-slate-700 mb-1">Door Number</label>
+                                    <input type="text" name="doorNumber" value={formData.doorNumber} onChange={handleInputChange} placeholder="Door Number" className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" />
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-3">
