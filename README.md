@@ -12,10 +12,8 @@ A professional MERN stack vehicle service & monthly payment collection managemen
 - 📲 WhatsApp payment reminder & thank you messages
 - 🚘 Customer & vehicle management
 - 👨‍💼 Admin & seller dashboards
-- ✅ Product/service approval workflow
+- ✅ service approval workflow
 - 📊 Global payment history
-- 🔳 QR code support
-- ☁️ Cloudinary image upload
 - 🎨 Responsive modern dashboard UI
 
 ---
@@ -25,11 +23,9 @@ A professional MERN stack vehicle service & monthly payment collection managemen
 ```text
 Seller Registration
         ↓
-Admin Verification
-        ↓
 Seller Dashboard Access
         ↓
-Add Products / Services
+    Services
         ↓
 Customer & Vehicle Registration
         ↓
@@ -57,8 +53,7 @@ Express.js
 MongoDB
 Mongoose
 JWT Authentication
-Cloudinary
-Multer
+
 
 
 📦 Installation
@@ -66,6 +61,8 @@ Frontend Setup
 cd frontend
 npm install
 npm run dev
+
+
 Backend Setup
 cd backend
 npm install
