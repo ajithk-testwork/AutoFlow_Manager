@@ -5,7 +5,7 @@ import {
     Users, IndianRupee, AlertCircle, Plus, X, Save, MessageCircle,
     CheckCircle2, Clock, Edit, Trash2, Search, History, CalendarDays,
     ChevronDown, ChevronUp, AlertTriangle, Database, ArrowLeft,
-    FileText, Filter, LogOut, Settings
+    FileText, Filter, LogOut, Settings, Car
 } from 'lucide-react';
 
 const Dashboard = () => {
@@ -83,7 +83,7 @@ const Dashboard = () => {
     const [initializedMonths, setInitializedMonths] = useState([]);
 
     const [formData, setFormData] = useState({
-        name: '', phone: '', doorNumber: '', amount: '', gender: 'male'
+        name: '', phone: '', vehicleName: '', doorNumber: '', amount: '', gender: 'male'
     });
 
     const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
@@ -200,7 +200,6 @@ const Dashboard = () => {
         }
     };
 
-
     const navigateToGlobalHistory = async () => {
         setCurrentView('history');
         setIsHistoryLoading(true);
@@ -299,7 +298,8 @@ const Dashboard = () => {
     };
 
     const filteredCustomers = dashboardData.filter(c => {
-        const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                              (c.vehicleName && c.vehicleName.toLowerCase().includes(searchTerm.toLowerCase()));
         let matchesStatus = true;
         if (statusFilter === 'PAID') matchesStatus = c.status === 'Paid';
         else if (statusFilter === 'PENDING') matchesStatus = c.status === 'Pending' || c.status === 'No Record';
@@ -320,7 +320,7 @@ const Dashboard = () => {
     const resetForm = () => {
         setIsModalOpen(false);
         setEditingId(null);
-        setFormData({ name: '', phone: '', doorNumber: '', amount: '', gender: 'male' });
+        setFormData({ name: '', phone: '', vehicleName: '', doorNumber: '', amount: '', gender: 'male' });
     };
 
     const handleSubmit = async (e) => {
@@ -328,6 +328,7 @@ const Dashboard = () => {
         const payload = {
             name: formData.name,
             phone: formData.phone,
+            vehicleName: formData.vehicleName,
             doorNumber: formData.doorNumber,
             monthlyAmount: Number(formData.amount),
             gender: formData.gender,
@@ -354,6 +355,7 @@ const Dashboard = () => {
         setFormData({
             name: customer.name,
             phone: customer.phone,
+            vehicleName: customer.vehicleName || '',
             doorNumber: customer.doorNumber || '',
             amount: customer.monthlyAmount,
             gender: customer.gender || 'male'
@@ -445,7 +447,7 @@ const Dashboard = () => {
             } else {
                 setSelectedPaymentDetails(null);
             }
-        } catch (error) { }
+        } catch (error) {}
     };
 
     const totalPaidBySelected = customerHistory
@@ -453,7 +455,6 @@ const Dashboard = () => {
         .reduce((sum, record) => sum + record.amount, 0);
 
     const handleSendWhatsApp = (customer, type) => {
-
         const finalAmount = customer.amount || customer.monthlyAmount;
         const missedDays = customer.missedDays || 0;
         const { name, phone, gender, dailyStatus = [] } = customer;
@@ -469,10 +470,8 @@ const Dashboard = () => {
         else if (type === 'reminder') rawTemplate = templates.reminderTemplate;
         else if (type === 'thankyou') rawTemplate = templates.thankyouTemplate;
 
-
         const finalUpi = templates.upiId || "Not Provided";
         const finalPhone = templates.phone || "Not Provided";
-
 
         let message = rawTemplate
             .replace(/{{name}}/g, `${name}${honorific}`)
@@ -483,13 +482,11 @@ const Dashboard = () => {
             .replace(/{{upi}}/g, finalUpi)
             .replace(/{{phone}}/g, finalPhone);
 
-
         let cleanPhone = phone.toString().replace(/\D/g, '');
         if (cleanPhone.length === 10) cleanPhone = '91' + cleanPhone;
 
         const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
         window.open(whatsappUrl, '_blank');
-
 
         setWaSentTracker(prev => ({ ...prev, [`${customer._id}-${type}`]: true }));
     };
@@ -739,7 +736,6 @@ const Dashboard = () => {
                             <Users size={16} /> Add <span className="hidden sm:inline">Customer</span>
                         </button>
 
-                        {/* --- NEW TEMPLATE BUTTON --- */}
                         <button onClick={() => setIsTemplateModalOpen(true)} className="shrink-0 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 px-3 py-2.5 rounded-xl font-medium transition-all active:scale-95 flex items-center justify-center shadow-sm" title="WhatsApp Templates">
                             <Settings size={18} className="text-slate-500" />
                         </button>
@@ -788,7 +784,7 @@ const Dashboard = () => {
                     <div className="flex gap-2 w-full sm:w-auto">
                         <div className="relative w-full sm:w-64">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                            <input type="text" placeholder="Search by name..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                            <input type="text" placeholder="Search by name or vehicle..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
                         </div>
                         <div className="relative">
                             <button onClick={() => { if (statusFilter === 'ALL') setStatusFilter('PAID'); else if (statusFilter === 'PAID') setStatusFilter('PENDING'); else setStatusFilter('ALL'); }} className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all border ${statusFilter === 'ALL' ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50' : statusFilter === 'PAID' ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100' : 'bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100'}`}>
@@ -809,6 +805,7 @@ const Dashboard = () => {
                     </div>
                 ) : (
                     <>
+                        {/* Mobile Card View */}
                         <div className="grid grid-cols-1 md:grid-cols-2 xl:hidden gap-4 p-4 sm:p-6 bg-slate-50/50">
                             {filteredCustomers.map((c) => {
                                 const todayStatus = getTodayStatus(c.dailyStatus);
@@ -820,7 +817,9 @@ const Dashboard = () => {
                                         <div className="flex justify-between items-start">
                                             <div>
                                                 <h3 className="font-extrabold text-slate-900 text-lg leading-tight">
-                                                    {c.name} {c.doorNumber && <span className="text-slate-500 text-sm font-bold ml-1">({c.doorNumber})</span>}
+                                                    {c.name}
+                                                    {c.vehicleName && <span className="text-blue-600 font-semibold text-sm"> - {c.vehicleName}</span>}
+                                                    {c.doorNumber && <span className="text-slate-500 text-sm font-bold ml-1">({c.doorNumber})</span>}
                                                 </h3>
                                                 <p className="text-slate-500 text-sm font-medium mt-1">+91 {c.phone}</p>
                                             </div>
@@ -899,6 +898,7 @@ const Dashboard = () => {
                             })}
                         </div>
 
+                        {/* Desktop Table View */}
                         <div className="hidden xl:block overflow-x-auto">
                             <table className="w-full text-left border-collapse">
                                 <thead className="bg-slate-50 sticky top-0">
@@ -922,7 +922,9 @@ const Dashboard = () => {
                                             <tr key={c._id} className="hover:bg-slate-50/50">
                                                 <td className="px-5 py-3">
                                                     <div className="font-bold text-slate-800 text-sm">
-                                                        {c.name} {c.doorNumber && <span className="text-slate-500 font-medium ml-1">({c.doorNumber})</span>}
+                                                        {c.name} 
+                                                        {c.vehicleName && <span className="text-blue-600 font-semibold ml-1"> - {c.vehicleName}</span>}
+                                                        {c.doorNumber && <span className="text-slate-500 font-medium ml-1">({c.doorNumber})</span>}
                                                     </div>
                                                     <div className="text-[10px] text-slate-400 mt-0.5">
                                                         {c.gender?.charAt(0).toUpperCase() || 'M'}
@@ -998,49 +1000,74 @@ const Dashboard = () => {
             {/* Customer Add/Edit Modal */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white rounded-2xl w-full max-w-[90%] sm:max-w-md overflow-hidden max-h-[90vh] flex flex-col">
+                    <div className="bg-white rounded-2xl w-full max-w-[90%] sm:max-w-xl overflow-hidden max-h-[90vh] flex flex-col">
                         <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center shrink-0">
                             <h3 className="text-lg font-bold text-slate-900">{editingId ? "Edit Customer" : "Add Customer"}</h3>
                             <button onClick={resetForm} className="p-1 hover:bg-slate-100 rounded-full"><X size={18} /></button>
                         </div>
                         <div className="overflow-y-auto custom-scrollbar p-5">
                             <form onSubmit={handleSubmit} className="space-y-4">
-                                <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-1">Name</label>
-                                    <input type="text" name="name" value={formData.name} onChange={handleInputChange} className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" required />
-                                </div>
                                 
-                                {/* NEW DOOR NUMBER INPUT */}
-                                <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-1">Door Number</label>
-                                    <input type="text" name="doorNumber" value={formData.doorNumber} onChange={handleInputChange} placeholder="Door Number" className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" />
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-semibold text-slate-700 mb-1">Customer Name</label>
+                                        <div className="relative">
+                                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                <Users size={16} className="text-slate-400" />
+                                            </div>
+                                            <input type="text" name="name" value={formData.name} onChange={handleInputChange} className="w-full pl-10 border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" placeholder="Enter name" required />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold text-slate-700 mb-1">WhatsApp Phone</label>
+                                        <div className="flex border border-slate-300 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500">
+                                            <span className="px-3 py-2.5 bg-slate-50 text-slate-500 text-sm font-medium border-r">+91</span>
+                                            <input type="tel" name="phone" value={formData.phone} onChange={handleInputChange} className="flex-1 px-3 py-2.5 text-sm outline-none" placeholder="10-digit number" required />
+                                        </div>
+                                    </div>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-semibold text-slate-700 mb-1">Vehicle Name (Optional)</label>
+                                        <div className="relative">
+                                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                <Car size={16} className="text-slate-400" />
+                                            </div>
+                                            <input type="text" name="vehicleName" value={formData.vehicleName} onChange={handleInputChange} className="w-full pl-10 border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" placeholder="e.g. Honda City" />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold text-slate-700 mb-1">Door Number (Optional)</label>
+                                        <div className="relative">
+                                            <input type="text" name="doorNumber" value={formData.doorNumber} onChange={handleInputChange} className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" placeholder="e.g. A-120" />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-sm font-semibold text-slate-700 mb-1">Monthly Amount (₹)</label>
-                                        <input type="number" name="amount" value={formData.amount} onChange={handleInputChange} className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" required />
+                                        <div className="relative">
+                                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                <IndianRupee size={16} className="text-slate-400" />
+                                            </div>
+                                            <input type="number" name="amount" value={formData.amount} onChange={handleInputChange} className="w-full pl-10 border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" placeholder="0.00" required />
+                                        </div>
                                     </div>
                                     <div>
                                         <label className="block text-sm font-semibold text-slate-700 mb-1">Gender</label>
-                                        <select name="gender" value={formData.gender} onChange={handleInputChange} className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm outline-none">
+                                        <select name="gender" value={formData.gender} onChange={handleInputChange} className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white">
                                             <option value="male">Male (Sir)</option>
                                             <option value="female">Female (Ma'am)</option>
                                             <option value="other">Other</option>
                                         </select>
                                     </div>
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-1">Phone</label>
-                                    <div className="flex border border-slate-300 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500">
-                                        <span className="px-3 py-2.5 bg-slate-50 text-slate-500 text-sm border-r">+91</span>
-                                        <input type="tel" name="phone" value={formData.phone} onChange={handleInputChange} className="flex-1 px-3 py-2.5 text-sm outline-none" required />
-                                    </div>
-                                </div>
 
-                                <div className="flex gap-3 pt-2">
-                                    <button type="button" onClick={resetForm} className="flex-1 py-2.5 text-slate-700 bg-white border border-slate-300 rounded-xl font-bold text-sm">Cancel</button>
-                                    <button type="submit" className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2"><Save size={16} /> {editingId ? 'Update' : 'Save'}</button>
+                                <div className="flex gap-3 pt-4 border-t border-slate-100 mt-4">
+                                    <button type="button" onClick={resetForm} className="flex-1 py-2.5 text-slate-700 bg-white border border-slate-300 rounded-xl font-bold text-sm hover:bg-slate-50 transition-colors">Cancel</button>
+                                    <button type="submit" className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm transition-colors"><Save size={16} /> {editingId ? 'Update Customer' : 'Save Customer'}</button>
                                 </div>
                             </form>
                         </div>
