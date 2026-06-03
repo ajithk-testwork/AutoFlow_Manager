@@ -52,7 +52,7 @@ const Dashboard = () => {
 
     // --- WHATSAPP TEMPLATE STATES ---
     const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
-    
+
     const [templates, setTemplates] = useState({
         requestTemplate: `Hello {{name}},\n\n📅 Billing Month: {{month}}\n\n🚗 Service Report:\nMissed Days: {{missedDays}}\nDates Missed: {{missedDates}}\n\n✅ Final Amount Due: ₹{{amount}}\n\n💳 Payment Options:\n\n🔹 UPI ID:\n\`\`\`{{upi}}\`\`\`\n\n🔹 GPay / PhonePe:\n\`\`\`{{phone}}\`\`\`\n\nThank you! 🚗✨`,
         reminderTemplate: `Hello {{name}},\n\nThis is a gentle reminder that your payment for *{{month}}* is still pending.\n\n💰 Final Amount Due: ₹{{amount}}\n\n💳 Payment Options:\n\n🔹 UPI ID:\n\`\`\`{{upi}}\`\`\`\n\n🔹 GPay / PhonePe:\n\`\`\`{{phone}}\`\`\`\n\nThank you! 🚗`,
@@ -62,7 +62,7 @@ const Dashboard = () => {
     });
 
 
- 
+
     // 2. THIS SWITCHES THE TICK MARKS WHEN YOU CHANGE THE VIEWING MONTH
     useEffect(() => {
         const savedTracker = localStorage.getItem(`autoflow_waTracker_${selectedMonth}`);
@@ -230,9 +230,9 @@ const Dashboard = () => {
 
             const isMonthStarted = currentPayments.length > 0;
 
-           const mergedData = activeCustomers.map(customer => {
+            const mergedData = activeCustomers.map(customer => {
                 const paymentRecord = paymentMap[customer._id];
-                
+
                 if (paymentRecord) {
                     return {
                         ...customer,
@@ -244,7 +244,7 @@ const Dashboard = () => {
                         // ✅ JUST TRUST THE DATABASE! No front-end calculations.
                         // Past months will keep their historical amounts.
                         // The backend already updates the current month during an edit.
-                        amount: paymentRecord.amount 
+                        amount: paymentRecord.amount
                     };
                 }
 
@@ -258,13 +258,13 @@ const Dashboard = () => {
                     amount: customer.monthlyAmount
                 };
             })
-            .filter(record => {
-                if (isMonthStarted) {
-                    return record.paymentId !== null;
-                }
-                return true;
-            });
-           
+                .filter(record => {
+                    if (isMonthStarted) {
+                        return record.paymentId !== null;
+                    }
+                    return true;
+                });
+
 
             setDashboardData(mergedData);
         } catch (error) {
@@ -299,8 +299,8 @@ const Dashboard = () => {
     };
 
     const filteredCustomers = dashboardData.filter(c => {
-        const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                              (c.vehicleName && c.vehicleName.toLowerCase().includes(searchTerm.toLowerCase()));
+        const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (c.vehicleName && c.vehicleName.toLowerCase().includes(searchTerm.toLowerCase()));
         let matchesStatus = true;
         if (statusFilter === 'PAID') matchesStatus = c.status === 'Paid';
         else if (statusFilter === 'PENDING') matchesStatus = c.status === 'Pending' || c.status === 'No Record';
@@ -448,7 +448,7 @@ const Dashboard = () => {
             } else {
                 setSelectedPaymentDetails(null);
             }
-        } catch (error) {}
+        } catch (error) { }
     };
 
     const totalPaidBySelected = customerHistory
@@ -489,8 +489,8 @@ const Dashboard = () => {
         const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
         window.open(whatsappUrl, '_blank');
 
-       setWaSentTracker(prev => {
-            const newState = { ...prev, [`${customer._id}-${type}`]: true };
+        setWaSentTracker(prev => {
+            const newState = { ...prev, [`${selectedMonth}-${customer._id}-${type}`]: true };
             localStorage.setItem(`autoflow_waTracker_${selectedMonth}`, JSON.stringify(newState));
             return newState;
         });
@@ -880,11 +880,11 @@ const Dashboard = () => {
                                             )}
                                             <div className="flex gap-2">
                                                 {c.status === 'Paid' ? (
-                                                    <button onClick={() => handleSendWhatsApp(c, 'thankyou')} className={`flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${waSentTracker[`${c._id}-thankyou`] ? 'bg-teal-100 text-teal-800 border border-teal-200' : 'bg-teal-50 text-teal-700 border border-teal-100 hover:bg-teal-100'}`}><MessageCircle size={18} /> {waSentTracker[`${c._id}-thankyou`] ? 'Thanks Sent ✓' : 'Send Thanks'}</button>
+                                                    <button onClick={() => handleSendWhatsApp(c, 'thankyou')} className={`flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${waSentTracker[`${selectedMonth}-${c._id}-thankyou`] ? 'bg-teal-100 text-teal-800 border border-teal-200' : 'bg-teal-50 text-teal-700 border border-teal-100 hover:bg-teal-100'}`}><MessageCircle size={18} /> {waSentTracker[`${selectedMonth}-${c._id}-thankyou`] ? 'Thanks Sent ✓' : 'Send Thanks'}</button>
                                                 ) : (
                                                     <>
-                                                        <button onClick={() => handleSendWhatsApp(c, 'request')} className={`flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${waSentTracker[`${c._id}-request`] ? 'bg-blue-100 text-blue-800 border border-blue-200' : 'bg-blue-50 text-blue-700 border border-blue-100 hover:bg-blue-100'}`}><MessageCircle size={18} /> {waSentTracker[`${c._id}-request`] ? 'Bill Sent ✓' : 'Send Bill'}</button>
-                                                        <button onClick={() => handleSendWhatsApp(c, 'reminder')} className={`flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${waSentTracker[`${c._id}-reminder`] ? 'bg-rose-100 text-rose-800 border border-rose-200' : 'bg-rose-50 text-rose-700 border border-rose-100 hover:bg-rose-100'}`}><AlertCircle size={18} /> {waSentTracker[`${c._id}-reminder`] ? 'Reminded ✓' : 'Reminder'}</button>
+                                                        <button onClick={() => handleSendWhatsApp(c, 'request')} className={`flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${waSentTracker[`${selectedMonth}-${c._id}-request`] ? 'bg-blue-100 text-blue-800 border border-blue-200' : 'bg-blue-50 text-blue-700 border border-blue-100 hover:bg-blue-100'}`}><MessageCircle size={18} /> {waSentTracker[`${selectedMonth}-${c._id}-request`] ? 'Bill Sent ✓' : 'Send Bill'}</button>
+                                                        <button onClick={() => handleSendWhatsApp(c, 'reminder')} className={`flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${waSentTracker[`${selectedMonth}-${c._id}-reminder`] ? 'bg-rose-100 text-rose-800 border border-rose-200' : 'bg-rose-50 text-rose-700 border border-rose-100 hover:bg-rose-100'}`}><AlertCircle size={18} /> {waSentTracker[`${selectedMonth}-${c._id}-reminder`] ? 'Reminded ✓' : 'Reminder'}</button>
                                                     </>
                                                 )}
                                             </div>
@@ -927,7 +927,7 @@ const Dashboard = () => {
                                             <tr key={c._id} className="hover:bg-slate-50/50">
                                                 <td className="px-5 py-3">
                                                     <div className="font-bold text-slate-800 text-sm">
-                                                        {c.name} 
+                                                        {c.name}
                                                         {c.vehicleName && <span className="text-blue-600 font-semibold ml-1"> - {c.vehicleName}</span>}
                                                         {c.doorNumber && <span className="text-slate-500 font-medium ml-1">({c.doorNumber})</span>}
                                                     </div>
@@ -974,15 +974,15 @@ const Dashboard = () => {
                                                         )}
                                                         {c.status === 'Paid' ? (
                                                             <button onClick={() => handleSendWhatsApp(c, 'thankyou')} className="p-1.5 text-teal-600 hover:bg-teal-50 rounded transition-colors relative" title="Send Thank You">
-                                                                <MessageCircle size={16} />{waSentTracker[`${c._id}-thankyou`] && <CheckCircle2 size={10} className="absolute -top-1 -right-1 text-teal-600 bg-white rounded-full" />}
+                                                                <MessageCircle size={16} />{waSentTracker[`${selectedMonth}-${c._id}-thankyou`] && <CheckCircle2 size={10} className="absolute -top-1 -right-1 text-teal-600 bg-white rounded-full" />}
                                                             </button>
                                                         ) : (
                                                             <>
                                                                 <button onClick={() => handleSendWhatsApp(c, 'request')} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors relative" title="Send Bill">
-                                                                    <MessageCircle size={16} />{waSentTracker[`${c._id}-request`] && <CheckCircle2 size={10} className="absolute -top-1 -right-1 text-blue-600 bg-white rounded-full" />}
+                                                                    <MessageCircle size={16} />{waSentTracker[`${selectedMonth}-${c._id}-request`] && <CheckCircle2 size={10} className="absolute -top-1 -right-1 text-blue-600 bg-white rounded-full" />}
                                                                 </button>
                                                                 <button onClick={() => handleSendWhatsApp(c, 'reminder')} className="p-1.5 text-rose-500 hover:bg-rose-50 rounded transition-colors relative" title="Send Reminder">
-                                                                    <AlertCircle size={16} />{waSentTracker[`${c._id}-reminder`] && <CheckCircle2 size={10} className="absolute -top-1 -right-1 text-rose-600 bg-white rounded-full" />}
+                                                                    <AlertCircle size={16} />{waSentTracker[`${selectedMonth}-${c._id}-reminder`] && <CheckCircle2 size={10} className="absolute -top-1 -right-1 text-rose-600 bg-white rounded-full" />}
                                                                 </button>
                                                             </>
                                                         )}
@@ -1012,7 +1012,7 @@ const Dashboard = () => {
                         </div>
                         <div className="overflow-y-auto custom-scrollbar p-5">
                             <form onSubmit={handleSubmit} className="space-y-4">
-                                
+
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-sm font-semibold text-slate-700 mb-1">Customer Name</label>
