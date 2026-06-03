@@ -62,13 +62,7 @@ const Dashboard = () => {
     });
 
 
-    // 1. THIS SAVES THE TICK MARKS TO LOCAL STORAGE EVERY TIME YOU CLICK SEND
-    useEffect(() => {
-        if (selectedMonth) {
-            localStorage.setItem(`autoflow_waTracker_${selectedMonth}`, JSON.stringify(waSentTracker));
-        }
-    }, [waSentTracker, selectedMonth]);
-
+ 
     // 2. THIS SWITCHES THE TICK MARKS WHEN YOU CHANGE THE VIEWING MONTH
     useEffect(() => {
         const savedTracker = localStorage.getItem(`autoflow_waTracker_${selectedMonth}`);
@@ -234,23 +228,23 @@ const Dashboard = () => {
                 }
             });
 
-            const mergedData = activeCustomers.map(customer => {
-                const paymentRecord = paymentMap[customer._id];
-                if (paymentRecord) {
-                    const missed = paymentRecord.missedDays || 0;
-                    const baseAmount = customer.monthlyAmount || paymentRecord.amount;
-                    const dynamicAmount = paymentRecord.status === 'Paid'
-                        ? paymentRecord.amount
-                        : getDynamicAmount(baseAmount, missed, selectedMonth);
+            const isMonthStarted = currentPayments.length > 0;
 
+           const mergedData = activeCustomers.map(customer => {
+                const paymentRecord = paymentMap[customer._id];
+                
+                if (paymentRecord) {
                     return {
                         ...customer,
                         paymentId: paymentRecord._id,
                         status: paymentRecord.status,
                         paidDate: paymentRecord.paidDate,
                         dailyStatus: paymentRecord.dailyStatus || [],
-                        missedDays: missed,
-                        amount: dynamicAmount
+                        missedDays: paymentRecord.missedDays || 0,
+                        // ✅ JUST TRUST THE DATABASE! No front-end calculations.
+                        // Past months will keep their historical amounts.
+                        // The backend already updates the current month during an edit.
+                        amount: paymentRecord.amount 
                     };
                 }
 
@@ -263,7 +257,14 @@ const Dashboard = () => {
                     missedDays: 0,
                     amount: customer.monthlyAmount
                 };
+            })
+            .filter(record => {
+                if (isMonthStarted) {
+                    return record.paymentId !== null;
+                }
+                return true;
             });
+           
 
             setDashboardData(mergedData);
         } catch (error) {
@@ -488,7 +489,11 @@ const Dashboard = () => {
         const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
         window.open(whatsappUrl, '_blank');
 
-        setWaSentTracker(prev => ({ ...prev, [`${customer._id}-${type}`]: true }));
+       setWaSentTracker(prev => {
+            const newState = { ...prev, [`${customer._id}-${type}`]: true };
+            localStorage.setItem(`autoflow_waTracker_${selectedMonth}`, JSON.stringify(newState));
+            return newState;
+        });
     };
 
     const StatusBadge = ({ status }) => {
