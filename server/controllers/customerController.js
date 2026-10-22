@@ -9,29 +9,31 @@ export const getMonthKey = () => {
   })} ${date.getFullYear()}`;
 };
 
+
 export const getCustomers = async (req, res) => {
-
   try {
-
-    const customers = await Customer.find({
-
+    const filter = {
       tenantId: req.user.tenantId,
-      serviceId: req.query.serviceId,
-      isActive: true
+      isActive: true,
+    };
 
-    });
+    // serviceId send pannina mattum filter apply aagum
+    if (req.query.serviceId) {
+      filter.serviceId = req.query.serviceId;
+    }
 
-    res.json(customers);
+    const customers = await Customer.find(filter);
 
-  } catch {
+    res.status(200).json(customers);
+  } catch (error) {
+    console.error("Error fetching customers:", error);
 
     res.status(500).json({
-      message: "Error fetching customers"
+      message: "Error fetching customers",
     });
-
   }
-
 };
+
 
 export const getCustomerHistory = async (
   req,
