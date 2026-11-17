@@ -124,29 +124,45 @@ export const getDashboardSummary = async (req, res) => {
 
 
 
+
 export const getCustomers = async (req, res) => {
   try {
+    const { serviceId, status } = req.query;
+
     const filter = {
       tenantId: req.user.tenantId,
-      isActive: true,
     };
 
-    // serviceId send pannina mattum filter apply aagum
-    if (req.query.serviceId) {
-      filter.serviceId = req.query.serviceId;
+    if (serviceId) {
+      filter.serviceId = serviceId;
     }
 
-    const customers = await Customer.find(filter);
+    // Website compatibility:
+    // No status parameter = active customers only
+    if (!status || status === "active") {
+      filter.isActive = true;
+    } else if (status === "inactive") {
+      filter.isActive = false;
+    } else if (status !== "all") {
+      return res.status(400).json({
+        message: "Invalid customer status",
+      });
+    }
 
-    res.status(200).json(customers);
+    const customers = await Customer.find(filter).sort({
+      createdAt: -1,
+    });
+
+    return res.status(200).json(customers);
   } catch (error) {
     console.error("Error fetching customers:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       message: "Error fetching customers",
     });
   }
 };
+
 
 
 export const getCustomerHistory = async (

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { Redirect } from "expo-router";
 import * as SecureStore from "expo-secure-store";
+
 import AppTabs from "@/components/app-tabs";
 
 export default function TabsLayout() {
@@ -13,13 +14,19 @@ export default function TabsLayout() {
 
     SecureStore.getItemAsync("autoflow_token")
       .then((token) => {
-        if (mounted) setAuthenticated(Boolean(token));
+        if (mounted) {
+          setAuthenticated(Boolean(token));
+        }
       })
       .catch(() => {
-        if (mounted) setAuthenticated(false);
+        if (mounted) {
+          setAuthenticated(false);
+        }
       })
       .finally(() => {
-        if (mounted) setChecking(false);
+        if (mounted) {
+          setChecking(false);
+        }
       });
 
     return () => {
