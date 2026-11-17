@@ -201,37 +201,34 @@ export const getCustomerHistory = async (
 
 };
 
-export const addCustomer = async (
-  req,
-  res
-) => {
 
+export const addCustomer = async (req, res) => {
   try {
-
     const {
       month,
       ...customerData
     } = req.body;
 
     if (!month) {
-
       return res.status(400).json({
-        message: "Month is required"
+        success: false,
+        message: "Month is required",
       });
-
     }
 
-    const newCustomer =
-      await Customer.create({
+    // Create new customer
+    const newCustomer = await Customer.create({
+      ...customerData,
 
-        ...customerData,
+      tenantId: req.user.tenantId,
 
-        tenantId: req.user.tenantId
+      // Welcome message tracking
+      welcomeMessageSent: false,
+      welcomeMessageSentAt: null,
+    });
 
-      });
-
+    // Create initial payment
     await Payment.create({
-
       tenantId: req.user.tenantId,
 
       serviceId: newCustomer.serviceId,
@@ -246,26 +243,25 @@ export const addCustomer = async (
 
       dailyStatus: [],
 
-      missedDays: 0
-
+      missedDays: 0,
     });
 
-    res.status(201).json(newCustomer);
+    return res.status(201).json({
+      success: true,
+      message: "Customer added successfully",
+      customer: newCustomer,
+    });
 
   } catch (error) {
+    console.error("Error adding customer:", error);
 
-    console.error(
-      "Error adding customer:",
-      error
-    );
-
-    res.status(500).json({
-      message: "Error adding customer"
+    return res.status(500).json({
+      success: false,
+      message: "Error adding customer",
     });
-
   }
-
 };
+
 
 export const deleteCustomer = async (
   req,
