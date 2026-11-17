@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  ImageBackground,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -11,14 +12,17 @@ import {
   View,
 } from "react-native";
 import { Link, router } from "expo-router";
-import { Feather } from "@expo/vector-icons"; // <-- Imported Icons
+import { Feather } from "@expo/vector-icons";
 import { loginUser } from "../services/authService";
+
+const HERO_IMAGE =
+  "https://images.leadconnectorhq.com/image/f_webp/q_80/r_1200/u_https%3A/assets.cdn.filesafe.space/nQdWxd33c8H3izCjRmAf/media/69c809889fc63a61273ccdc8.png";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false); // <-- Added state for toggle
+  const [showPassword, setShowPassword] = useState(false);
 
   async function handleLogin() {
     if (!email.trim() || !password) {
@@ -28,12 +32,10 @@ export default function LoginScreen() {
 
     try {
       setLoading(true);
-
       await loginUser({
         email: email.trim().toLowerCase(),
         password,
       });
-
       router.replace("/services");
     } catch (error: any) {
       Alert.alert("Login failed", error.message);
@@ -49,71 +51,136 @@ export default function LoginScreen() {
     >
       <ScrollView
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ flexGrow: 1, justifyContent: "center" }}
-        className="px-6 py-10"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ flexGrow: 1 }}
       >
-        <View className="mb-8">
-          <Text className="text-3xl font-bold text-slate-900">AutoFlow</Text>
-          <Text className="mt-2 text-base text-slate-500">
-            Sign in to manage your car cleaning business.
-          </Text>
-        </View>
+        {/* Hero section */}
+        <ImageBackground
+          source={{ uri: HERO_IMAGE }}
+          resizeMode="cover"
+          className="h-[310px] justify-end overflow-hidden"
+        >
+          <View className="absolute inset-0 bg-slate-950/65" />
 
-        <View className="rounded-3xl bg-white p-5 shadow-sm shadow-slate-200">
-          <Text className="mb-2 font-semibold text-slate-800">Email</Text>
-          <TextInput
-            value={email}
-            onChangeText={setEmail}
-            placeholder="you@example.com"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-            editable={!loading}
-            className="mb-5 rounded-xl border border-slate-200 px-4 py-3 text-slate-900 focus:border-blue-500"
-          />
+          <View className="px-7 pb-9">
+            <View className="mb-5 h-14 w-14 items-center justify-center rounded-2xl bg-blue-600">
+              <Feather name="truck" size={28} color="#FFFFFF" />
+            </View>
 
-          <Text className="mb-2 font-semibold text-slate-800">Password</Text>
+            <Text className="text-3xl font-extrabold text-white">AutoFlow</Text>
 
-          {/* Password Input with Hide/Show Icon */}
-          <View className="relative mb-6 justify-center">
-            <TextInput
-              value={password}
-              onChangeText={setPassword}
-              placeholder="Enter your password"
-              secureTextEntry={!showPassword}
-              editable={!loading}
-              className="rounded-xl border border-slate-200 py-3 pl-4 pr-12 text-slate-900 focus:border-blue-500"
-            />
-            <Pressable
-              onPress={() => setShowPassword(!showPassword)}
-              className="absolute right-0 h-full w-12 items-center justify-center rounded-r-xl"
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Feather
-                name={showPassword ? "eye" : "eye-off"}
-                size={20}
-                color="#64748b"
-              />
-            </Pressable>
+            <Text className="mt-2 text-base leading-6 text-slate-200">
+              Manage your car cleaning business{"\n"}
+              smarter, faster and easier.
+            </Text>
+
+            <View className="mt-5 flex-row items-center">
+              <View className="h-1 w-10 rounded-full bg-blue-500" />
+              <View className="ml-2 h-1 w-5 rounded-full bg-white/50" />
+              <View className="ml-2 h-1 w-5 rounded-full bg-white/50" />
+            </View>
+          </View>
+        </ImageBackground>
+
+        {/* Login form */}
+        <View className="-mt-5 flex-1 rounded-t-[28px] bg-slate-50 px-6 pt-8 pb-10">
+          <View className="mb-7">
+            <Text className="text-2xl font-bold text-slate-900">
+              Welcome back!
+            </Text>
+            <Text className="mt-2 text-sm text-slate-500">
+              Sign in to continue to your dashboard.
+            </Text>
           </View>
 
-          <Pressable
-            onPress={handleLogin}
-            disabled={loading}
-            className={`items-center rounded-xl py-4 ${loading ? "bg-blue-400" : "bg-blue-600 active:bg-blue-700"}`}
-          >
-            {loading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text className="font-bold text-white text-base">Login</Text>
-            )}
-          </Pressable>
+          <View className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
+            {/* Email */}
+            <Text className="mb-2 text-sm font-semibold text-slate-700">
+              Email address
+            </Text>
 
-          <View className="mt-6 flex-row justify-center">
-            <Text className="text-slate-500">New to AutoFlow? </Text>
-            <Link href="/register" className="font-bold text-blue-600">
-              Create account
-            </Link>
+            <View className="mb-5 h-14 flex-row items-center rounded-xl border border-slate-200 bg-slate-50 px-4">
+              <Feather name="mail" size={19} color="#94A3B8" />
+              <TextInput
+                value={email}
+                onChangeText={setEmail}
+                placeholder="you@example.com"
+                placeholderTextColor="#94A3B8"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!loading}
+                className="ml-3 flex-1 text-base text-slate-900"
+              />
+            </View>
+
+            {/* Password */}
+            <Text className="mb-2 text-sm font-semibold text-slate-700">
+              Password
+            </Text>
+
+            <View className="mb-6 h-14 flex-row items-center rounded-xl border border-slate-200 bg-slate-50 px-4">
+              <Feather name="lock" size={19} color="#94A3B8" />
+
+              <TextInput
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Enter your password"
+                placeholderTextColor="#94A3B8"
+                secureTextEntry={!showPassword}
+                editable={!loading}
+                className="ml-3 flex-1 text-base text-slate-900"
+              />
+
+              <Pressable
+                onPress={() => setShowPassword(!showPassword)}
+                hitSlop={10}
+              >
+                <Feather
+                  name={showPassword ? "eye" : "eye-off"}
+                  size={20}
+                  color="#64748B"
+                />
+              </Pressable>
+            </View>
+
+            {/* Login button */}
+            <Pressable
+              onPress={handleLogin}
+              disabled={loading}
+              className={`h-14 flex-row items-center justify-center rounded-xl ${
+                loading ? "bg-blue-400" : "bg-blue-600"
+              }`}
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <>
+                  <Text className="mr-2 text-base font-bold text-white">
+                    Sign In
+                  </Text>
+                  <Feather name="arrow-right" size={19} color="#FFFFFF" />
+                </>
+              )}
+            </Pressable>
+
+            <View className="mt-6 flex-row justify-center">
+              <Text className="text-sm text-slate-500">New to AutoFlow? </Text>
+              <Link
+                href="/register"
+                className="text-sm font-bold text-blue-600"
+              >
+                Create account
+              </Link>
+            </View>
+          </View>
+
+          {/* Bottom trust text */}
+          <View className="mt-7 flex-row items-center justify-center">
+            <Feather name="shield-check" size={15} color="#64748B" />
+            <Text className="ml-2 text-xs text-slate-400">
+              Secure login · AutoFlow Manager
+            </Text>
           </View>
         </View>
       </ScrollView>
