@@ -34,7 +34,7 @@ export default function LoginScreen() {
         password,
       });
 
-      router.replace("/(tabs)");
+      router.replace("/services");
     } catch (error: any) {
       Alert.alert("Login failed", error.message);
     } finally {

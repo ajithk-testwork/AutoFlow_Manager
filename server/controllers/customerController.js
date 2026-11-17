@@ -1,5 +1,6 @@
 import Customer from "../models/Customer.js";
 import Payment from "../models/Payment.js";
+import Service from "../models/Service.js"
 
 export const getMonthKey = () => {
   const date = new Date();
@@ -8,6 +9,119 @@ export const getMonthKey = () => {
     month: "long"
   })} ${date.getFullYear()}`;
 };
+
+
+export const getDashboardSummary = async (req, res) => {
+  try {
+    const { serviceId, month } = req.query;
+    const tenantId = req.user.tenantId;
+
+    if (!serviceId || !month) {
+      return res.status(400).json({
+        message: "Service ID and month are required",
+      });
+    }
+
+    // Verify this service belongs to the logged-in tenant
+    const service = await Service.findOne({
+      _id: serviceId,
+      tenantId,
+      isActive: true,
+    });
+
+    if (!service) {
+      return res.status(404).json({
+        message: "Service not found",
+      });
+    }
+
+    const paymentFilter = {
+      tenantId,
+      serviceId,
+      month: month.trim(),
+    };
+
+    const [
+      totalCustomers,
+      activeCustomers,
+      inactiveCustomers,
+      payments,
+      recentCustomers,
+    ] = await Promise.all([
+      Customer.countDocuments({ tenantId, serviceId }),
+
+      Customer.countDocuments({
+        tenantId,
+        serviceId,
+        isActive: true,
+      }),
+
+      Customer.countDocuments({
+        tenantId,
+        serviceId,
+        isActive: false,
+      }),
+
+      Payment.find(paymentFilter).select("amount status"),
+
+      Customer.find({
+        tenantId,
+        serviceId,
+        isActive: true,
+      })
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .select("name phone vehicleName monthlyAmount isActive"),
+    ]);
+
+    const expected = payments.reduce(
+      (sum, payment) => sum + (Number(payment.amount) || 0),
+      0
+    );
+
+    const collected = payments
+      .filter((payment) => payment.status === "Paid")
+      .reduce(
+        (sum, payment) => sum + (Number(payment.amount) || 0),
+        0
+      );
+
+    const pending = payments
+      .filter((payment) => payment.status === "Pending")
+      .reduce(
+        (sum, payment) => sum + (Number(payment.amount) || 0),
+        0
+      );
+
+    return res.status(200).json({
+      success: true,
+      service: {
+        id: service._id,
+        name: service.serviceName,
+      },
+      month: month.trim(),
+      customers: {
+        total: totalCustomers,
+        active: activeCustomers,
+        inactive: inactiveCustomers,
+      },
+      payments: {
+        expected,
+        collected,
+        pending,
+        totalPayments: payments.length,
+      },
+      recentCustomers,
+    });
+  } catch (error) {
+    console.error("Dashboard Summary Error:", error);
+
+    return res.status(500).json({
+      message: "Failed to fetch dashboard summary",
+    });
+  }
+};
+
 
 
 export const getCustomers = async (req, res) => {

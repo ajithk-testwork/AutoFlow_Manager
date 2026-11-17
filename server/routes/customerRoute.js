@@ -11,7 +11,8 @@ import {
   updateDailyStatus,
   getSinglePayment,
   getGlobalHistory,
-  updateCustomer
+  updateCustomer,
+  getDashboardSummary
 } from "../controllers/customerController.js";
 
 import { login, logout, register, getAllClients } from "../controllers/authController.js";
@@ -30,6 +31,7 @@ const cusRouter = express.Router();
 
 cusRouter.post( "/register", register );
 cusRouter.post( "/login", login );
+cusRouter.get("/dashboard-summary", protect, getDashboardSummary)
 cusRouter.post("/logout", protect, logout)
 cusRouter.get( "/clients", getAllClients);
 

@@ -1,3 +1,4 @@
+
 import { api } from "../api/client";
 
 export interface Customer {
@@ -12,21 +13,13 @@ export interface Customer {
   isActive?: boolean;
 }
 
-
-
-
-
-
-export interface Customer {
-  _id: string;
-  name: string;
-  phone: string;
-  isActive?: boolean;
-}
-
-export async function fetchCustomers(): Promise<Customer[]> {
+export async function fetchCustomers(
+  serviceId: string
+): Promise<Customer[]> {
   try {
-    const response = await api.get("/getcustomer");
+    const response = await api.get("/getcustomer", {
+      params: { serviceId },
+    });
 
     console.log("CUSTOMER API STATUS:", response.status);
     console.log("CUSTOMER API DATA:", response.data);
@@ -37,17 +30,18 @@ export async function fetchCustomers(): Promise<Customer[]> {
 
     return response.data;
   } catch (error: any) {
-    console.log("CUSTOMER API STATUS:", error.response?.status);
     console.log("CUSTOMER API ERROR:", error.response?.data ?? error.message);
+
     throw new Error(
-      error.response?.data?.message ?? error.message ?? "Customer loading failed"
+      error.response?.data?.message ??
+        error.message ??
+        "Customer loading failed"
     );
   }
 }
 
-
 export async function createCustomer(
-  customer: Omit<Customer, "_id"> & { month: string },
+  customer: Omit<Customer, "_id"> & { month: string }
 ) {
   const response = await api.post("/", customer);
   return response.data;
@@ -55,7 +49,7 @@ export async function createCustomer(
 
 export async function updateCustomer(
   id: string,
-  customer: Partial<Customer> & { month?: string },
+  customer: Partial<Customer> & { month?: string }
 ) {
   const response = await api.put(`/${id}`, customer);
   return response.data;

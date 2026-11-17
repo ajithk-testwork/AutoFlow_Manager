@@ -23,7 +23,7 @@ export default function Index() {
 
       // Validate saved token using a protected backend endpoint.
       await api.get("/services");
-      router.replace("/(tabs)");
+      router.replace("/services");
     } catch (err: any) {
       const status = err?.response?.status;
 
