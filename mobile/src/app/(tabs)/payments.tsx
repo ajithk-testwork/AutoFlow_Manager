@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -15,6 +15,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, router } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { api } from "../../api/client";
+
+/* ───────────────────────────── Types ───────────────────────────── */
 
 type Customer = {
   _id: string;
@@ -51,6 +53,7 @@ type PaymentCustomer = Customer & {
   paidDate: string | null;
   dailyStatus: DailyStatus[];
   missedDays: number;
+  readOnly: boolean;
 };
 
 type WhatsAppTemplates = {
@@ -60,6 +63,10 @@ type WhatsAppTemplates = {
   upiId: string;
   phone: string;
 };
+
+type FilterKey = "ALL" | "PENDING" | "PAID";
+
+/* ───────────────────────────── Constants ───────────────────────────── */
 
 const DEFAULT_TEMPLATES: WhatsAppTemplates = {
   requestTemplate:
@@ -75,6 +82,8 @@ const DEFAULT_TEMPLATES: WhatsAppTemplates = {
   phone: "",
 };
 
+/* ───────────────────────────── Helpers ───────────────────────────── */
+
 const formatCurrency = (amount: number) =>
   `₹${(Number(amount) || 0).toLocaleString("en-IN")}`;
 
@@ -83,7 +92,6 @@ const getToday = () => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
-
   return `${year}-${month}-${day}`;
 };
 
@@ -93,160 +101,131 @@ const formatDate = (date: string) =>
     month: "short",
   });
 
+const isUnpaid = (status: string) =>
+  status === "Pending" || status === "No Record";
+
+/* ───────────────────────────── Screen ───────────────────────────── */
+
 export default function PaymentsScreen() {
   const [customers, setCustomers] = useState<PaymentCustomer[]>([]);
   const [selectedMonth, setSelectedMonth] = useState("");
+  const [isReadOnly, setIsReadOnly] = useState(false);
   const [serviceId, setServiceId] = useState("");
 
   const [templates, setTemplates] =
     useState<WhatsAppTemplates>(DEFAULT_TEMPLATES);
 
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<"ALL" | "PAID" | "PENDING">("ALL");
+  const [filter, setFilter] = useState<FilterKey>("ALL");
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [actionId, setActionId] = useState("");
   const [error, setError] = useState("");
+  const [toast, setToast] = useState("");
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [waTracker, setWaTracker] = useState<Record<string, boolean>>({});
 
+  const showToast = (message: string) => {
+    setToast(message);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(""), 2200);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    };
+  }, []);
+
+  /* ── Load payments for the selected month ── */
   const loadPayments = useCallback(async () => {
     try {
       setError("");
-
       const [savedServiceId, savedMonth] = await Promise.all([
         SecureStore.getItemAsync("autoflow_service_id"),
         SecureStore.getItemAsync("autoflow_selected_month"),
       ]);
+      if (!savedServiceId) throw new Error("Please select a service first.");
 
-      if (!savedServiceId) {
-        throw new Error("Please select a service first.");
-      }
-
-      const month =
-        savedMonth ||
-        `${new Date().toLocaleString("en-US", {
-          month: "long",
-        })} ${new Date().getFullYear()}`;
+      const now = new Date();
+      const currentMonth = `${now.toLocaleString("en-US", { month: "long" })} ${now.getFullYear()}`;
+      const month = savedMonth || currentMonth;
+      const readOnly = month !== currentMonth;
 
       setServiceId(savedServiceId);
       setSelectedMonth(month);
+      setIsReadOnly(readOnly);
 
-      const [customerResponse, paymentResponse] = await Promise.all([
-        api.get("/getcustomer", {
-          params: { serviceId: savedServiceId },
-        }),
-        api.get("/payments", {
-          params: { month },
-        }),
-      ]);
-
-      const allCustomers: Customer[] = Array.isArray(customerResponse.data)
-        ? customerResponse.data
-        : [];
-
+      // Payment documents are the source of truth for historical billing.
+      const paymentResponse = await api.get("/payments", {
+        params: { month, serviceId: savedServiceId },
+      });
       const allPayments: Payment[] = Array.isArray(paymentResponse.data)
         ? paymentResponse.data
         : [];
 
-      // Backend currently returns tenant-wide payments.
-      // Match populated customer serviceId to selected workspace.
-      const servicePayments = allPayments.filter((payment) => {
-        const paymentCustomer = payment.customerId;
-
-        if (!paymentCustomer || typeof paymentCustomer !== "object") {
-          return false;
-        }
-
-        return String(paymentCustomer.serviceId) === String(savedServiceId);
-      });
-
-      const paymentMap = new Map<string, Payment>();
-
-      servicePayments.forEach((payment) => {
+      const mapped: PaymentCustomer[] = allPayments.map((payment: any) => {
+        const linked =
+          payment.customerId && typeof payment.customerId === "object"
+            ? payment.customerId
+            : {};
         const customerId =
           typeof payment.customerId === "object"
-            ? payment.customerId._id
+            ? payment.customerId?._id
             : payment.customerId;
 
-        if (customerId) {
-          paymentMap.set(String(customerId), payment);
-        }
+        return {
+          _id: String(customerId || payment._id),
+          name: payment.customerName || linked.name || "Customer",
+          phone: payment.customerPhone || linked.phone || "",
+          vehicleName: payment.customerVehicleName || linked.vehicleName || "",
+          doorNumber: payment.customerDoorNumber || linked.doorNumber || "",
+          monthlyAmount: Number(payment.baseAmount ?? payment.amount ?? 0),
+          gender: payment.customerGender || linked.gender || "",
+          isActive: linked.isActive ?? true,
+          serviceId: savedServiceId,
+          paymentId: payment._id,
+          amount: Number(payment.amount || 0),
+          status: payment.status || "Pending",
+          paidDate: payment.paidDate || null,
+          dailyStatus: payment.dailyStatus || [],
+          missedDays: Number(payment.missedDays || 0),
+          readOnly,
+        };
       });
+      setCustomers(mapped);
 
-      const monthStarted = servicePayments.length > 0;
-
-      const merged: PaymentCustomer[] = allCustomers
-        .filter(
-          (customer) => String(customer.serviceId) === String(savedServiceId),
-        )
-        .map((customer) => {
-          const payment = paymentMap.get(customer._id);
-
-          if (payment) {
-            return {
-              ...customer,
-              paymentId: payment._id,
-              amount: Number(payment.amount) || 0,
-              status: payment.status,
-              paidDate: payment.paidDate || null,
-              dailyStatus: payment.dailyStatus || [],
-              missedDays: Number(payment.missedDays) || 0,
-            };
-          }
-
-          return {
-            ...customer,
-            paymentId: null,
-            amount: Number(customer.monthlyAmount) || 0,
-            status: "No Record",
-            paidDate: null,
-            dailyStatus: [],
-            missedDays: 0,
-          };
-        })
-        .filter((customer) =>
-          monthStarted ? customer.paymentId !== null : true,
-        );
-
-      setCustomers(merged);
-
-      // Load service-specific WhatsApp templates.
       try {
         const templateResponse = await api.get(
           `/whatsapp-template/${savedServiceId}`,
         );
-
         const saved = templateResponse.data;
-
-        if (saved) {
-          setTemplates({
-            requestTemplate:
-              saved.requestTemplate || DEFAULT_TEMPLATES.requestTemplate,
-            reminderTemplate:
-              saved.reminderTemplate || DEFAULT_TEMPLATES.reminderTemplate,
-            thankyouTemplate:
-              saved.thankyouTemplate || DEFAULT_TEMPLATES.thankyouTemplate,
-            upiId: saved.upiId || "",
-            phone: saved.phone || "",
-          });
-        } else {
-          setTemplates(DEFAULT_TEMPLATES);
-        }
+        setTemplates(
+          saved
+            ? {
+                requestTemplate:
+                  saved.requestTemplate || DEFAULT_TEMPLATES.requestTemplate,
+                reminderTemplate:
+                  saved.reminderTemplate || DEFAULT_TEMPLATES.reminderTemplate,
+                thankyouTemplate:
+                  saved.thankyouTemplate || DEFAULT_TEMPLATES.thankyouTemplate,
+                upiId: saved.upiId || "",
+                phone: saved.phone || "",
+              }
+            : DEFAULT_TEMPLATES,
+        );
       } catch (templateError) {
         console.log("Template loading failed:", templateError);
         setTemplates(DEFAULT_TEMPLATES);
       }
 
-      // Restore WhatsApp sent indicators for selected month.
       const trackerKey = `autoflow_waTracker_${month}`;
       const tracker = await SecureStore.getItemAsync(trackerKey);
-
       setWaTracker(tracker ? JSON.parse(tracker) : {});
     } catch (err: any) {
       console.log("Payment loading error:", err.response?.data || err.message);
-
       setError(
         err.response?.data?.message || err.message || "Unable to load payments",
       );
@@ -281,56 +260,77 @@ export default function PaymentsScreen() {
     setRefreshing(false);
   };
 
-  const togglePayment = async (customer: PaymentCustomer) => {
+  /* ── Payment + daily status actions ── */
+  const runToggle = async (customer: PaymentCustomer) => {
+    if (!customer.paymentId) return;
+
+    const wasPending = isUnpaid(customer.status);
+
+    try {
+      setActionId(customer.paymentId);
+      await api.patch(`/payment/${customer.paymentId}/toggle`);
+      await loadPayments();
+      showToast(
+        wasPending
+          ? `${customer.name} marked as paid`
+          : `${customer.name} moved back to pending`,
+      );
+    } catch (err: any) {
+      Alert.alert(
+        "Couldn’t update payment",
+        err.response?.data?.message || "Please try again.",
+      );
+    } finally {
+      setActionId("");
+    }
+  };
+
+  const togglePayment = (customer: PaymentCustomer) => {
+    if (customer.readOnly) {
+      Alert.alert("Past month", "Previous month payments are read-only.");
+      return;
+    }
+
     if (!customer.paymentId) {
       Alert.alert(
-        "Payment Not Available",
-        "Activate this billing month from Home before updating payment.",
+        "Month not activated",
+        "Activate this billing month from Home before updating payments.",
       );
       return;
     }
 
-    const nextStatus = customer.status === "Pending" ? "Paid" : "Pending";
-
-    Alert.alert(
-      nextStatus === "Paid" ? "Confirm Payment" : "Revert Payment",
-      nextStatus === "Paid"
-        ? `Mark ${customer.name}'s payment as Paid?`
-        : `Change ${customer.name}'s payment back to Pending?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Confirm",
-          onPress: async () => {
-            try {
-              setActionId(customer.paymentId!);
-
-              await api.patch(`/payment/${customer.paymentId}/toggle`, {});
-
-              await loadPayments();
-            } catch (err: any) {
-              Alert.alert(
-                "Update Failed",
-                err.response?.data?.message ||
-                  "Unable to update payment status.",
-              );
-            } finally {
-              setActionId("");
-            }
+    // Marking as paid is one tap. Reverting asks first, since it undoes a collected payment.
+    if (customer.status === "Paid") {
+      Alert.alert(
+        `Move ${customer.name} back to pending?`,
+        `${formatCurrency(customer.amount)} will no longer count as collected.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Move to pending",
+            style: "destructive",
+            onPress: () => runToggle(customer),
           },
-        },
-      ],
-    );
+        ],
+      );
+      return;
+    }
+
+    runToggle(customer);
   };
 
   const updateDailyStatus = async (
     customer: PaymentCustomer,
     status: "Cleaned" | "Missed" | "None",
   ) => {
+    if (customer.readOnly) {
+      Alert.alert("Past month", "Previous month records are read-only.");
+      return;
+    }
     if (!customer.paymentId) {
       Alert.alert(
-        "No Payment Record",
-        "Activate this month before updating daily status.",
+        "Month not activated",
+        "Activate this month before updating daily service.",
       );
       return;
     }
@@ -348,27 +348,25 @@ export default function PaymentsScreen() {
       await loadPayments();
     } catch (err: any) {
       Alert.alert(
-        "Update Failed",
-        err.response?.data?.message || "Unable to update daily status.",
+        "Couldn’t update service",
+        err.response?.data?.message || "Please try again.",
       );
     } finally {
       setActionId("");
     }
   };
 
-  const getTodayStatus = (dailyStatus: DailyStatus[]) => {
-    return (
-      dailyStatus.find((item) => item.date?.split("T")[0] === getToday())
-        ?.status || null
-    );
-  };
+  const getTodayStatus = (dailyStatus: DailyStatus[]) =>
+    dailyStatus.find((item) => item.date?.split("T")[0] === getToday())
+      ?.status || null;
 
+  /* ── WhatsApp ── */
   const sendWhatsApp = async (
     customer: PaymentCustomer,
     type: "request" | "reminder" | "thankyou",
   ) => {
     if (!customer.phone) {
-      Alert.alert("Phone Missing", "This customer has no phone number.");
+      Alert.alert("Phone missing", "This customer has no phone number.");
       return;
     }
 
@@ -392,23 +390,18 @@ export default function PaymentsScreen() {
       .replace(/{{month}}/g, selectedMonth)
       .replace(/{{missedDays}}/g, String(customer.missedDays))
       .replace(/{{missedDates}}/g, missedDates || "None")
-      .replace(
-        /{{amount}}/g,
-        Number(customer.amount || customer.monthlyAmount).toLocaleString(
-          "en-IN",
-        ),
-      )
+      .replace(/{{amount}}/g, Number(customer.amount).toLocaleString("en-IN"))
       .replace(/{{upi}}/g, templates.upiId || "Not Provided")
       .replace(/{{phone}}/g, templates.phone || "Not Provided");
 
     let cleanPhone = customer.phone.replace(/\D/g, "");
-
-    if (cleanPhone.length === 10) {
-      cleanPhone = `91${cleanPhone}`;
-    }
+    if (cleanPhone.length === 10) cleanPhone = `91${cleanPhone}`;
 
     if (cleanPhone.length < 10) {
-      Alert.alert("Invalid Phone", "Please check the customer's phone number.");
+      Alert.alert(
+        "Invalid phone number",
+        "Check the customer’s phone number and try again.",
+      );
       return;
     }
 
@@ -418,10 +411,7 @@ export default function PaymentsScreen() {
       await Linking.openURL(url);
 
       const trackerKey = `${selectedMonth}-${customer._id}-${type}`;
-      const updatedTracker = {
-        ...waTracker,
-        [trackerKey]: true,
-      };
+      const updatedTracker = { ...waTracker, [trackerKey]: true };
 
       setWaTracker(updatedTracker);
 
@@ -431,62 +421,97 @@ export default function PaymentsScreen() {
       );
     } catch (err) {
       Alert.alert(
-        "WhatsApp Unavailable",
-        "Unable to open WhatsApp on this device.",
+        "WhatsApp unavailable",
+        "WhatsApp couldn’t be opened on this device.",
       );
     }
   };
 
-  const filteredCustomers = customers.filter((customer) => {
+  /* ── Derived data ── */
+  const stats = useMemo(() => {
+    const expected = customers.reduce((s, c) => s + c.amount, 0);
+    const collected = customers.reduce(
+      (s, c) => (c.status === "Paid" ? s + c.amount : s),
+      0,
+    );
+    const pending = customers.reduce(
+      (s, c) => (isUnpaid(c.status) ? s + c.amount : s),
+      0,
+    );
+    const paidCount = customers.filter((c) => c.status === "Paid").length;
+
+    return {
+      expected,
+      collected,
+      pending,
+      paidCount,
+      pendingCount: customers.length - paidCount,
+      rate:
+        expected > 0
+          ? Math.min(100, Math.round((collected / expected) * 100))
+          : 0,
+    };
+  }, [customers]);
+
+  const filteredCustomers = useMemo(() => {
     const term = search.trim().toLowerCase();
 
-    const matchesSearch =
-      customer.name?.toLowerCase().includes(term) ||
-      customer.phone?.toLowerCase().includes(term) ||
-      customer.vehicleName?.toLowerCase().includes(term) ||
-      customer.doorNumber?.toLowerCase().includes(term);
+    return customers
+      .filter((customer) => {
+        const matchesSearch =
+          !term ||
+          customer.name?.toLowerCase().includes(term) ||
+          customer.phone?.toLowerCase().includes(term) ||
+          customer.vehicleName?.toLowerCase().includes(term) ||
+          customer.doorNumber?.toLowerCase().includes(term);
 
-    const matchesStatus =
-      filter === "ALL" ||
-      (filter === "PAID" && customer.status === "Paid") ||
-      (filter === "PENDING" &&
-        (customer.status === "Pending" || customer.status === "No Record"));
+        const matchesStatus =
+          filter === "ALL" ||
+          (filter === "PAID" && customer.status === "Paid") ||
+          (filter === "PENDING" && isUnpaid(customer.status));
 
-    return matchesSearch && matchesStatus;
-  });
+        return matchesSearch && matchesStatus;
+      })
+      // Unpaid customers first so the work left to do is always at the top.
+      .sort((a, b) => {
+        const au = isUnpaid(a.status) ? 0 : 1;
+        const bu = isUnpaid(b.status) ? 0 : 1;
+        if (au !== bu) return au - bu;
+        return a.name.localeCompare(b.name);
+      });
+  }, [customers, search, filter]);
 
-  const expected = customers.reduce(
-    (sum, customer) => sum + customer.amount,
-    0,
-  );
+  const filterOptions: { key: FilterKey; label: string; count: number }[] = [
+    { key: "ALL", label: "All", count: customers.length },
+    { key: "PENDING", label: "Pending", count: stats.pendingCount },
+    { key: "PAID", label: "Paid", count: stats.paidCount },
+  ];
 
-  const collected = customers.reduce(
-    (sum, customer) =>
-      customer.status === "Paid" ? sum + customer.amount : sum,
-    0,
-  );
+  const openCustomer = (customer: PaymentCustomer) =>
+    router.push({
+      pathname: "/customer/[id]",
+      params: {
+        id: customer._id,
+        name: customer.name,
+        phone: customer.phone,
+        vehicleName: customer.vehicleName || "",
+        doorNumber: customer.doorNumber || "",
+        monthlyAmount: String(customer.monthlyAmount || 0),
+        gender: customer.gender || "",
+        isActive: String(customer.isActive ?? true),
+        isHistorical: String(customer.readOnly),
+        billingAmount: String(customer.amount || 0),
+        selectedMonth,
+      },
+    });
 
-  const pending = customers.reduce(
-    (sum, customer) =>
-      customer.status === "Pending" || customer.status === "No Record"
-        ? sum + customer.amount
-        : sum,
-    0,
-  );
-
-  const paidCount = customers.filter(
-    (customer) => customer.status === "Paid",
-  ).length;
-
-  const pendingCount = customers.length - paidCount;
+  /* ───────────────────────── Loading / error ───────────────────────── */
 
   if (loading) {
     return (
       <SafeAreaView className="flex-1 items-center justify-center bg-slate-50">
         <ActivityIndicator size="large" color="#2563EB" />
-        <Text className="mt-3 text-sm text-slate-500">
-          Loading payment collection...
-        </Text>
+        <Text className="mt-3 text-sm text-slate-500">Loading payments…</Text>
       </SafeAreaView>
     );
   }
@@ -494,28 +519,39 @@ export default function PaymentsScreen() {
   if (error && customers.length === 0) {
     return (
       <SafeAreaView className="flex-1 items-center justify-center bg-slate-50 px-5">
-        <View className="w-full rounded-2xl bg-white p-6">
-          <Text className="text-center text-xl font-bold text-slate-900">
+        <View className="w-full rounded-3xl bg-white p-6">
+          <Text className="text-center text-4xl">📡</Text>
+          <Text className="mt-3 text-center text-xl font-bold text-slate-900">
             Payments unavailable
           </Text>
           <Text className="mt-2 text-center text-sm text-slate-500">
             {error}
           </Text>
           <TouchableOpacity
-            onPress={handleRefresh}
-            className="mt-5 items-center rounded-xl bg-blue-600 py-3"
+            onPress={() => {
+              setLoading(true);
+              loadPayments().finally(() => setLoading(false));
+            }}
+            className="mt-5 items-center rounded-xl bg-blue-600 py-4"
           >
-            <Text className="font-bold text-white">Try Again</Text>
+            <Text className="font-bold text-white">Try again</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
   }
 
+  /* ───────────────────────── Month not activated ───────────────────────── */
+
+  const monthNotActivated = customers.length === 0 && !isReadOnly;
+
+  /* ───────────────────────────── Render ───────────────────────────── */
+
   return (
     <SafeAreaView className="flex-1 bg-slate-50" edges={["top"]}>
       <ScrollView
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -524,386 +560,456 @@ export default function PaymentsScreen() {
           />
         }
       >
-        <View className="px-5 pb-10 pt-4">
+        <View className="px-5 pb-12 pt-4">
           {/* Header */}
           <View className="flex-row items-center justify-between">
-            <View className="flex-1">
+            <View className="flex-1 pr-3">
               <Text className="text-2xl font-extrabold text-slate-900">
-                Payment Collection
+                Payments
               </Text>
-              <Text className="mt-1 text-sm text-slate-500">
-                {selectedMonth} · {customers.length} customers
-              </Text>
-            </View>
-
-            <View className="rounded-xl bg-blue-50 px-3 py-2">
-              <Text className="text-xs font-bold text-blue-700">
-                {selectedMonth.split(" ")[0]}
-              </Text>
-            </View>
-          </View>
-
-          {/* Summary */}
-          <View className="mt-6 rounded-2xl bg-blue-600 p-5">
-            <Text className="text-xs font-semibold text-blue-100">
-              EXPECTED COLLECTION
-            </Text>
-            <Text className="mt-2 text-3xl font-extrabold text-white">
-              {formatCurrency(expected)}
-            </Text>
-            <View className="mt-4 flex-row justify-between border-t border-blue-400 pt-4">
-              <View>
-                <Text className="text-xs text-blue-100">Collected</Text>
-                <Text className="mt-1 font-bold text-white">
-                  {formatCurrency(collected)}
-                </Text>
-              </View>
-              <View>
-                <Text className="text-xs text-blue-100">Pending</Text>
-                <Text className="mt-1 font-bold text-white">
-                  {formatCurrency(pending)}
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Counts */}
-          <View className="mt-3 flex-row gap-3">
-            <View className="flex-1 rounded-2xl border border-green-100 bg-green-50 p-4">
-              <Text className="text-xs font-bold text-green-700">PAID</Text>
-              <Text className="mt-2 text-2xl font-extrabold text-green-700">
-                {paidCount}
-              </Text>
-            </View>
-            <View className="flex-1 rounded-2xl border border-red-100 bg-red-50 p-4">
-              <Text className="text-xs font-bold text-red-600">PENDING</Text>
-              <Text className="mt-2 text-2xl font-extrabold text-red-600">
-                {pendingCount}
-              </Text>
-            </View>
-          </View>
-
-          {/* Search */}
-          <View className="mt-6 rounded-xl border border-slate-200 bg-white px-4">
-            <TextInput
-              value={search}
-              onChangeText={setSearch}
-              placeholder="Search customer or vehicle..."
-              placeholderTextColor="#94A3B8"
-              className="py-4 text-sm text-slate-900"
-            />
-          </View>
-
-          {/* Filters */}
-          <View className="mt-4 flex-row gap-2">
-            {(["ALL", "PAID", "PENDING"] as const).map((item) => (
-              <TouchableOpacity
-                key={item}
-                onPress={() => setFilter(item)}
-                className={`flex-1 items-center rounded-xl py-3 ${
-                  filter === item ? "bg-blue-600" : "bg-white"
-                }`}
-              >
-                <Text
-                  className={`text-xs font-bold ${
-                    filter === item ? "text-white" : "text-slate-600"
+              <View className="mt-1 flex-row items-center">
+                <View
+                  className={`mr-2 rounded-full px-2.5 py-0.5 ${
+                    isReadOnly ? "bg-amber-100" : "bg-blue-100"
                   }`}
                 >
-                  {item}
+                  <Text
+                    className={`text-[11px] font-bold ${
+                      isReadOnly ? "text-amber-700" : "text-blue-700"
+                    }`}
+                  >
+                    {selectedMonth}
+                  </Text>
+                </View>
+                <Text className="text-xs text-slate-500">
+                  {isReadOnly ? "Read-only" : "Current month"}
                 </Text>
-              </TouchableOpacity>
-            ))}
+              </View>
+            </View>
           </View>
 
-          {/* Customer list */}
-          <View className="mb-3 mt-7 flex-row items-center justify-between">
-            <Text className="text-lg font-extrabold text-slate-900">
-              Customers
-            </Text>
-            <Text className="text-xs text-slate-500">
-              {filteredCustomers.length} records
-            </Text>
-          </View>
-
-          {filteredCustomers.length === 0 ? (
-            <View className="items-center rounded-2xl bg-white p-7">
-              <Text className="text-3xl">💳</Text>
-              <Text className="mt-3 font-bold text-slate-800">
-                No payments found
+          {/* Past-month notice */}
+          {isReadOnly && (
+            <View className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <Text className="text-sm font-bold text-amber-800">
+                You’re viewing a past month
               </Text>
-              <Text className="mt-1 text-center text-xs text-slate-400">
-                Try changing your search or filter.
+              <Text className="mt-1 text-xs leading-4 text-amber-700">
+                Payments and daily service for {selectedMonth} can’t be
+                changed. You can still send WhatsApp messages.
               </Text>
             </View>
+          )}
+
+          {/* Month not activated */}
+          {monthNotActivated ? (
+            <View className="mt-6 items-center rounded-3xl border border-amber-200 bg-white p-7">
+              <View className="h-16 w-16 items-center justify-center rounded-full bg-amber-50">
+                <Text className="text-3xl">🗓️</Text>
+              </View>
+              <Text className="mt-4 text-center text-lg font-extrabold text-slate-900">
+                {selectedMonth} hasn’t started
+              </Text>
+              <Text className="mt-1 text-center text-sm leading-5 text-slate-500">
+                Activate the month from Home to create a pending payment for
+                each customer. They’ll appear here for collection.
+              </Text>
+              <TouchableOpacity
+                onPress={() => router.push("/(tabs)")}
+                activeOpacity={0.85}
+                className="mt-5 w-full items-center rounded-2xl bg-blue-600 py-4"
+              >
+                <Text className="font-bold text-white">Go to Home</Text>
+              </TouchableOpacity>
+            </View>
           ) : (
-            filteredCustomers.map((customer) => {
-              const todayStatus = getTodayStatus(customer.dailyStatus);
+            <>
+              {/* Collection summary */}
+              <View className="mt-5 overflow-hidden rounded-3xl bg-blue-600 p-5">
+                <View className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-blue-500 opacity-60" />
+                <View className="absolute -bottom-12 right-10 h-32 w-32 rounded-full bg-blue-700 opacity-50" />
 
-              const missedDates = customer.dailyStatus
-                .filter((item) => item.status === "Missed")
-                .map((item) => formatDate(item.date));
+                <Text className="text-sm font-semibold text-blue-100">
+                  Collected so far
+                </Text>
+                <Text className="mt-1 text-4xl font-extrabold text-white">
+                  {formatCurrency(stats.collected)}
+                </Text>
+                <Text className="mt-1 text-xs text-blue-100">
+                  of {formatCurrency(stats.expected)} expected
+                </Text>
 
-              const isBusy = actionId === customer.paymentId;
+                <View className="mt-4 h-2.5 overflow-hidden rounded-full bg-blue-400/50">
+                  <View
+                    style={{ width: `${stats.rate}%` }}
+                    className="h-full rounded-full bg-white"
+                  />
+                </View>
 
-              return (
-                <View
-                  key={customer._id}
-                  className="mb-4 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm"
-                >
-                  {/* Customer info */}
-                  <Pressable
-                    onPress={() =>
-                      router.push({
-                        pathname: "/customer/[id]",
-                        params: {
-                          id: customer._id,
-                          name: customer.name,
-                          phone: customer.phone,
-                          vehicleName: customer.vehicleName || "",
-                          doorNumber: customer.doorNumber || "",
-                          monthlyAmount: String(customer.monthlyAmount || 0),
-                          gender: customer.gender || "",
-                          isActive: String(customer.isActive ?? true),
-                        },
-                      })
-                    }
-                    className="flex-row items-center"
-                  >
-                    <View className="h-12 w-12 items-center justify-center rounded-2xl bg-blue-50">
-                      <Text className="text-lg font-bold text-blue-700">
-                        {customer.name?.charAt(0)?.toUpperCase() || "C"}
-                      </Text>
-                    </View>
+                <View className="mt-2 flex-row justify-between">
+                  <Text className="text-xs font-bold text-white">
+                    {stats.rate}% collected
+                  </Text>
+                  <Text className="text-xs text-blue-100">
+                    {formatCurrency(stats.pending)} due
+                  </Text>
+                </View>
+              </View>
 
-                    <View className="ml-3 flex-1">
-                      <Text className="text-base font-bold text-slate-900">
-                        {customer.name}
-                      </Text>
-                      <Text className="mt-1 text-xs text-slate-500">
-                        {customer.phone}
-                      </Text>
-                      {customer.vehicleName ? (
-                        <Text className="mt-1 text-xs text-slate-400">
-                          {customer.vehicleName}
-                        </Text>
-                      ) : null}
-                    </View>
-
-                    <Text className="text-slate-400">›</Text>
+              {/* Search */}
+              <View className="mt-5 flex-row items-center rounded-2xl border border-slate-200 bg-white px-4">
+                <Text className="mr-2 text-lg text-slate-400">⌕</Text>
+                <TextInput
+                  value={search}
+                  onChangeText={setSearch}
+                  placeholder="Search name, phone or vehicle"
+                  placeholderTextColor="#94A3B8"
+                  className="h-12 flex-1 text-sm text-slate-900"
+                />
+                {search.length > 0 && (
+                  <Pressable onPress={() => setSearch("")} hitSlop={10}>
+                    <Text className="text-base text-slate-400">✕</Text>
                   </Pressable>
+                )}
+              </View>
 
-                  {/* Amount and status */}
-                  <View className="mt-4 flex-row items-center justify-between border-t border-slate-100 pt-3">
-                    <View>
-                      <Text className="text-xs text-slate-400">
-                        Final Amount
-                      </Text>
-                      <Text className="mt-1 text-xl font-extrabold text-slate-900">
-                        {formatCurrency(customer.amount)}
-                      </Text>
-                    </View>
-
-                    <View
-                      className={`rounded-full px-3 py-2 ${
-                        customer.status === "Paid"
-                          ? "bg-green-50"
-                          : customer.status === "Pending"
-                            ? "bg-red-50"
-                            : "bg-amber-50"
+              {/* Filters */}
+              <View className="mt-3 flex-row gap-2">
+                {filterOptions.map((option) => {
+                  const selected = filter === option.key;
+                  return (
+                    <TouchableOpacity
+                      key={option.key}
+                      onPress={() => setFilter(option.key)}
+                      className={`flex-row items-center rounded-full px-4 py-2 ${
+                        selected
+                          ? "bg-blue-600"
+                          : "border border-slate-200 bg-white"
                       }`}
                     >
                       <Text
-                        className={`text-xs font-bold ${
-                          customer.status === "Paid"
-                            ? "text-green-700"
-                            : customer.status === "Pending"
-                              ? "text-red-600"
-                              : "text-amber-700"
+                        className={`text-sm font-semibold ${
+                          selected ? "text-white" : "text-slate-600"
                         }`}
                       >
-                        {customer.status === "No Record"
-                          ? "Not Started"
-                          : customer.status}
+                        {option.label}
                       </Text>
-                    </View>
-                  </View>
-
-                  {/* Daily status */}
-                  <View className="mt-4 rounded-xl bg-slate-50 p-3">
-                    <View className="flex-row items-center justify-between">
-                      <Text className="text-sm font-bold text-slate-800">
-                        Daily Service
-                      </Text>
-                      <Text className="text-xs text-slate-500">Today</Text>
-                    </View>
-
-                    {todayStatus ? (
-                      <View className="mt-3 flex-row items-center justify-between">
+                      <View
+                        className={`ml-2 rounded-full px-2 ${
+                          selected ? "bg-blue-500" : "bg-slate-100"
+                        }`}
+                      >
                         <Text
-                          className={`text-sm font-bold ${
-                            todayStatus === "Cleaned"
-                              ? "text-green-700"
-                              : "text-red-600"
+                          className={`text-[11px] font-bold ${
+                            selected ? "text-white" : "text-slate-500"
                           }`}
                         >
-                          {todayStatus} Today
+                          {option.count}
                         </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
 
+              <Text className="mb-3 mt-5 text-xs font-semibold text-slate-500">
+                Showing {filteredCustomers.length} of {customers.length}
+              </Text>
+
+              {/* List */}
+              {filteredCustomers.length === 0 ? (
+                <View className="items-center rounded-3xl bg-white p-7">
+                  <Text className="text-3xl">
+                    {filter === "PENDING" && !search ? "🎉" : "💳"}
+                  </Text>
+                  <Text className="mt-3 font-bold text-slate-800">
+                    {filter === "PENDING" && !search
+                      ? "Everyone has paid"
+                      : customers.length === 0
+                        ? "No billing records"
+                        : "No matches"}
+                  </Text>
+                  <Text className="mt-1 text-center text-xs text-slate-400">
+                    {customers.length === 0
+                      ? `${selectedMonth} has no payment records.`
+                      : "Try a different search or filter."}
+                  </Text>
+                  {customers.length > 0 && (search || filter !== "ALL") && (
+                    <TouchableOpacity
+                      onPress={() => {
+                        setSearch("");
+                        setFilter("ALL");
+                      }}
+                      className="mt-4 rounded-xl bg-slate-200 px-5 py-3"
+                    >
+                      <Text className="font-semibold text-slate-700">
+                        Clear filters
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ) : (
+                filteredCustomers.map((customer) => {
+                  const todayStatus = getTodayStatus(customer.dailyStatus);
+                  const missedDates = customer.dailyStatus
+                    .filter((item) => item.status === "Missed")
+                    .map((item) => formatDate(item.date));
+
+                  const isBusy = actionId === customer.paymentId;
+                  const paid = customer.status === "Paid";
+                  const unpaid = isUnpaid(customer.status);
+
+                  const statusBg = paid
+                    ? "bg-green-50"
+                    : customer.status === "Pending"
+                      ? "bg-red-50"
+                      : "bg-slate-100";
+                  const statusText = paid
+                    ? "text-green-700"
+                    : customer.status === "Pending"
+                      ? "text-red-600"
+                      : "text-slate-500";
+
+                  const tracked = (type: string) =>
+                    waTracker[`${selectedMonth}-${customer._id}-${type}`];
+
+                  return (
+                    <View
+                      key={customer._id}
+                      className="mb-4 overflow-hidden rounded-3xl border border-slate-100 bg-white"
+                    >
+                      {/* Customer + amount */}
+                      <Pressable
+                        onPress={() => openCustomer(customer)}
+                        android_ripple={{ color: "#E2E8F0" }}
+                        className="p-4"
+                      >
+                        <View className="flex-row items-center">
+                          <View
+                            className={`h-12 w-12 items-center justify-center rounded-full ${
+                              paid ? "bg-green-50" : "bg-blue-50"
+                            }`}
+                          >
+                            <Text
+                              className={`text-lg font-bold ${
+                                paid ? "text-green-700" : "text-blue-700"
+                              }`}
+                            >
+                              {customer.name?.charAt(0)?.toUpperCase() || "C"}
+                            </Text>
+                          </View>
+
+                          <View className="ml-3 flex-1">
+                            <Text
+                              className="text-base font-bold text-slate-900"
+                              numberOfLines={1}
+                            >
+                              {customer.name}
+                            </Text>
+                            <Text className="mt-0.5 text-xs text-slate-500">
+                              {customer.phone}
+                            </Text>
+                            {customer.vehicleName ? (
+                              <Text
+                                className="mt-0.5 text-xs text-slate-400"
+                                numberOfLines={1}
+                              >
+                                {customer.vehicleName}
+                              </Text>
+                            ) : null}
+                          </View>
+
+                          <View className="items-end">
+                            <Text className="text-lg font-extrabold text-slate-900">
+                              {formatCurrency(customer.amount)}
+                            </Text>
+                            <View
+                              className={`mt-1 rounded-full px-2.5 py-0.5 ${statusBg}`}
+                            >
+                              <Text
+                                className={`text-[11px] font-bold ${statusText}`}
+                              >
+                                {customer.status === "No Record"
+                                  ? "Not started"
+                                  : customer.status}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+                      </Pressable>
+
+                      {/* Daily service */}
+                      <View className="mx-4 rounded-2xl bg-slate-50 p-3">
+                        <View className="flex-row items-center justify-between">
+                          <Text className="text-sm font-bold text-slate-800">
+                            {customer.readOnly ? "Service summary" : "Today’s service"}
+                          </Text>
+                          {customer.missedDays > 0 && (
+                            <View className="rounded-full bg-red-50 px-2.5 py-0.5">
+                              <Text className="text-[11px] font-bold text-red-600">
+                                {customer.missedDays} missed
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+
+                        {!customer.readOnly &&
+                          (todayStatus ? (
+                            <View className="mt-3 flex-row items-center justify-between">
+                              <Text
+                                className={`text-sm font-bold ${
+                                  todayStatus === "Cleaned"
+                                    ? "text-green-700"
+                                    : "text-red-600"
+                                }`}
+                              >
+                                {todayStatus === "Cleaned"
+                                  ? "✓ Cleaned today"
+                                  : "✕ Missed today"}
+                              </Text>
+
+                              <TouchableOpacity
+                                disabled={isBusy}
+                                onPress={() =>
+                                  updateDailyStatus(customer, "None")
+                                }
+                                className="rounded-lg bg-white px-4 py-2"
+                              >
+                                <Text className="text-xs font-bold text-slate-600">
+                                  Undo
+                                </Text>
+                              </TouchableOpacity>
+                            </View>
+                          ) : (
+                            <View className="mt-3 flex-row gap-2">
+                              <TouchableOpacity
+                                disabled={!customer.paymentId || isBusy}
+                                onPress={() =>
+                                  updateDailyStatus(customer, "Cleaned")
+                                }
+                                className="flex-1 items-center rounded-xl border border-green-200 bg-white py-3"
+                              >
+                                <Text className="text-xs font-bold text-green-700">
+                                  ✨ Cleaned
+                                </Text>
+                              </TouchableOpacity>
+
+                              <TouchableOpacity
+                                disabled={!customer.paymentId || isBusy}
+                                onPress={() =>
+                                  updateDailyStatus(customer, "Missed")
+                                }
+                                className="flex-1 items-center rounded-xl border border-red-200 bg-white py-3"
+                              >
+                                <Text className="text-xs font-bold text-red-600">
+                                  ✕ Missed
+                                </Text>
+                              </TouchableOpacity>
+                            </View>
+                          ))}
+
+                        {customer.missedDays > 0 ? (
+                          <Text className="mt-2 text-xs text-slate-500">
+                            Missed on {missedDates.join(", ")}
+                          </Text>
+                        ) : customer.readOnly ? (
+                          <Text className="mt-2 text-xs text-slate-500">
+                            No missed days
+                          </Text>
+                        ) : null}
+                      </View>
+
+                      {/* Payment action */}
+                      {!customer.readOnly && customer.paymentId ? (
                         <TouchableOpacity
                           disabled={isBusy}
-                          onPress={() => updateDailyStatus(customer, "None")}
-                          className="rounded-lg bg-white px-4 py-2"
-                        >
-                          <Text className="text-xs font-bold text-slate-600">
-                            Undo
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    ) : (
-                      <View className="mt-3 flex-row gap-2">
-                        <TouchableOpacity
-                          disabled={!customer.paymentId || isBusy}
-                          onPress={() => updateDailyStatus(customer, "Cleaned")}
-                          className="flex-1 items-center rounded-lg border border-green-200 bg-white py-3"
-                        >
-                          <Text className="text-xs font-bold text-green-700">
-                            ✨ Clean
-                          </Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          disabled={!customer.paymentId || isBusy}
-                          onPress={() => updateDailyStatus(customer, "Missed")}
-                          className="flex-1 items-center rounded-lg border border-red-200 bg-white py-3"
-                        >
-                          <Text className="text-xs font-bold text-red-600">
-                            ✕ Miss
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    )}
-
-                    {customer.missedDays > 0 && (
-                      <View className="mt-3">
-                        <Text className="text-xs font-bold text-red-600">
-                          Missed: {customer.missedDays} days
-                        </Text>
-                        <Text className="mt-1 text-xs text-slate-500">
-                          {missedDates.join(", ")}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-
-                  {/* Payment action */}
-                  {customer.paymentId ? (
-                    <TouchableOpacity
-                      disabled={isBusy}
-                      onPress={() => togglePayment(customer)}
-                      className={`mt-3 items-center rounded-xl py-3.5 ${
-                        customer.status === "Pending"
-                          ? "bg-green-600"
-                          : "bg-amber-100"
-                      }`}
-                    >
-                      {isBusy ? (
-                        <ActivityIndicator
-                          color={
-                            customer.status === "Pending"
-                              ? "#FFFFFF"
-                              : "#92400E"
-                          }
-                        />
-                      ) : (
-                        <Text
-                          className={`font-bold ${
-                            customer.status === "Pending"
-                              ? "text-white"
-                              : "text-amber-800"
+                          onPress={() => togglePayment(customer)}
+                          activeOpacity={0.85}
+                          className={`mx-4 mt-3 items-center rounded-2xl py-3.5 ${
+                            unpaid ? "bg-green-600" : "bg-slate-100"
                           }`}
                         >
-                          {customer.status === "Pending"
-                            ? "✓ Mark as Paid"
-                            : "↩ Revert to Pending"}
-                        </Text>
-                      )}
-                    </TouchableOpacity>
-                  ) : (
-                    <View className="mt-3 rounded-xl bg-amber-50 p-3">
-                      <Text className="text-center text-xs font-semibold text-amber-700">
-                        Activate {selectedMonth} from Home to enable payment
-                        updates.
-                      </Text>
+                          {isBusy ? (
+                            <ActivityIndicator
+                              color={unpaid ? "#FFFFFF" : "#475569"}
+                            />
+                          ) : (
+                            <Text
+                              className={`font-bold ${
+                                unpaid ? "text-white" : "text-slate-600"
+                              }`}
+                            >
+                              {unpaid
+                                ? `Mark ${formatCurrency(customer.amount)} as paid`
+                                : "Move back to pending"}
+                            </Text>
+                          )}
+                        </TouchableOpacity>
+                      ) : null}
+
+                      {/* WhatsApp */}
+                      <View className="mx-4 mb-4 mt-3 flex-row gap-2">
+                        {paid ? (
+                          <TouchableOpacity
+                            onPress={() => sendWhatsApp(customer, "thankyou")}
+                            className={`flex-1 items-center rounded-xl py-3 ${
+                              tracked("thankyou") ? "bg-teal-100" : "bg-teal-50"
+                            }`}
+                          >
+                            <Text className="text-xs font-bold text-teal-700">
+                              {tracked("thankyou")
+                                ? "Thanks sent ✓"
+                                : "Send thanks"}
+                            </Text>
+                          </TouchableOpacity>
+                        ) : (
+                          <>
+                            <TouchableOpacity
+                              onPress={() => sendWhatsApp(customer, "request")}
+                              className={`flex-1 items-center rounded-xl py-3 ${
+                                tracked("request") ? "bg-blue-100" : "bg-blue-50"
+                              }`}
+                            >
+                              <Text className="text-xs font-bold text-blue-700">
+                                {tracked("request") ? "Bill sent ✓" : "Send bill"}
+                              </Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                              onPress={() => sendWhatsApp(customer, "reminder")}
+                              className={`flex-1 items-center rounded-xl py-3 ${
+                                tracked("reminder") ? "bg-red-100" : "bg-red-50"
+                              }`}
+                            >
+                              <Text className="text-xs font-bold text-red-600">
+                                {tracked("reminder")
+                                  ? "Reminded ✓"
+                                  : "Send reminder"}
+                              </Text>
+                            </TouchableOpacity>
+                          </>
+                        )}
+                      </View>
                     </View>
-                  )}
-
-                  {/* WhatsApp actions */}
-                  <View className="mt-3 flex-row gap-2">
-                    {customer.status === "Paid" ? (
-                      <TouchableOpacity
-                        onPress={() => sendWhatsApp(customer, "thankyou")}
-                        className={`flex-1 items-center rounded-xl py-3 ${
-                          waTracker[`${selectedMonth}-${customer._id}-thankyou`]
-                            ? "bg-teal-100"
-                            : "bg-teal-50"
-                        }`}
-                      >
-                        <Text className="text-xs font-bold text-teal-700">
-                          {waTracker[
-                            `${selectedMonth}-${customer._id}-thankyou`
-                          ]
-                            ? "Thanks Sent ✓"
-                            : "Send Thanks"}
-                        </Text>
-                      </TouchableOpacity>
-                    ) : (
-                      <>
-                        <TouchableOpacity
-                          onPress={() => sendWhatsApp(customer, "request")}
-                          className={`flex-1 items-center rounded-xl py-3 ${
-                            waTracker[
-                              `${selectedMonth}-${customer._id}-request`
-                            ]
-                              ? "bg-blue-100"
-                              : "bg-blue-50"
-                          }`}
-                        >
-                          <Text className="text-xs font-bold text-blue-700">
-                            {waTracker[
-                              `${selectedMonth}-${customer._id}-request`
-                            ]
-                              ? "Bill Sent ✓"
-                              : "Send Bill"}
-                          </Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          onPress={() => sendWhatsApp(customer, "reminder")}
-                          className={`flex-1 items-center rounded-xl py-3 ${
-                            waTracker[
-                              `${selectedMonth}-${customer._id}-reminder`
-                            ]
-                              ? "bg-red-100"
-                              : "bg-red-50"
-                          }`}
-                        >
-                          <Text className="text-xs font-bold text-red-600">
-                            {waTracker[
-                              `${selectedMonth}-${customer._id}-reminder`
-                            ]
-                              ? "Reminded ✓"
-                              : "Reminder"}
-                          </Text>
-                        </TouchableOpacity>
-                      </>
-                    )}
-                  </View>
-                </View>
-              );
-            })
+                  );
+                })
+              )}
+            </>
           )}
         </View>
       </ScrollView>
+
+      {/* Toast */}
+      {toast ? (
+        <View
+          pointerEvents="none"
+          className="absolute bottom-8 left-5 right-5 items-center"
+        >
+          <View className="rounded-full bg-slate-900 px-5 py-3">
+            <Text className="text-sm font-semibold text-white">{toast}</Text>
+          </View>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }

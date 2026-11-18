@@ -19,6 +19,10 @@ const whatsappTemplateSchema = new mongoose.Schema(
       default:
         "Hi {{name}}, welcome to our service! Thank you for choosing us. We are happy to serve you.",
     },
+    phone: {
+      type: String,
+      default: "",
+    },
 
     requestTemplate: {
       type: String,

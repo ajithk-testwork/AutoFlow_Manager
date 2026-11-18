@@ -40,16 +40,23 @@ export default function CustomerOverviewScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
 
-  const customer = {
-    id: params.id,
-    name: params.name || "Customer",
-    phone: params.phone || "",
-    vehicleName: params.vehicleName || "",
-    doorNumber: params.doorNumber || "",
-    monthlyAmount: Number(params.monthlyAmount || 0),
-    gender: params.gender || "",
-    isActive: params.isActive === "true",
-  };
+ 
+const customer = {
+  id: params.id,
+  name: params.name || "Customer",
+  phone: params.phone || "",
+  vehicleName: params.vehicleName || "",
+  doorNumber: params.doorNumber || "",
+  monthlyAmount: Number(params.monthlyAmount || 0),
+  gender: params.gender || "",
+  isActive: params.isActive === "true",
+  isHistorical: params.isHistorical === "true",
+  billingAmount: Number(
+    params.billingAmount || params.monthlyAmount || 0
+  ),
+  selectedMonth: params.selectedMonth || "",
+};
+
 
   const loadHistory = useCallback(async () => {
     try {
@@ -206,7 +213,7 @@ export default function CustomerOverviewScreen() {
                 ["Vehicle", customer.vehicleName],
                 ["Door Number", customer.doorNumber],
                 ["Gender", customer.gender],
-                ["Monthly Amount", formatAmount(customer.monthlyAmount)],
+                [customer.isHistorical ? "Billed Amount" : "Monthly Amount", formatAmount(customer.billingAmount)],
               ].map(([label, value]) => (
                 <View
                   key={label}

@@ -1,5 +1,5 @@
-
 import WhatsappTemplate from "../models/WhatsappTemplate.js";
+import Service from "../models/Service.js";
 
 export const saveTemplate = async (req, res) => {
   try {
@@ -10,6 +10,7 @@ export const saveTemplate = async (req, res) => {
       thankyouTemplate,
       welcomeTemplate,
       upiId,
+      phone,
     } = req.body;
 
     const tenantId = req.user.tenantId;
@@ -21,39 +22,54 @@ export const saveTemplate = async (req, res) => {
       });
     }
 
-    const existing = await WhatsappTemplate.findOne({
+    // Verify service belongs to logged-in tenant
+    const service = await Service.findOne({
+      _id: serviceId,
       tenantId,
-      serviceId,
     });
 
-    if (existing) {
-      existing.requestTemplate = requestTemplate;
-      existing.reminderTemplate = reminderTemplate;
-      existing.thankyouTemplate = thankyouTemplate;
-      existing.welcomeTemplate = welcomeTemplate;
-      existing.upiId = upiId;
-
-      await existing.save();
-
-      return res.json({
-        success: true,
-        message: "Template updated",
+    if (!service) {
+      return res.status(404).json({
+        success: false,
+        message: "Service not found",
       });
     }
 
-    await WhatsappTemplate.create({
-      tenantId,
-      serviceId,
-      requestTemplate,
-      reminderTemplate,
-      thankyouTemplate,
-      welcomeTemplate,
-      upiId,
-    });
+    const updateData = {};
 
-    return res.json({
+    if (requestTemplate !== undefined)
+      updateData.requestTemplate = requestTemplate;
+
+    if (reminderTemplate !== undefined)
+      updateData.reminderTemplate = reminderTemplate;
+
+    if (thankyouTemplate !== undefined)
+      updateData.thankyouTemplate = thankyouTemplate;
+
+    if (welcomeTemplate !== undefined)
+      updateData.welcomeTemplate = welcomeTemplate;
+
+    if (upiId !== undefined) updateData.upiId = upiId;
+
+    if (phone !== undefined) updateData.phone = phone;
+
+    const template = await WhatsappTemplate.findOneAndUpdate(
+      { tenantId, serviceId },
+      {
+        $set: updateData,
+        $setOnInsert: { tenantId, serviceId },
+      },
+      {
+        new: true,
+        upsert: true,
+        runValidators: true,
+      },
+    );
+
+    return res.status(200).json({
       success: true,
-      message: "Template saved",
+      message: "WhatsApp templates saved successfully",
+      data: template,
     });
   } catch (error) {
     console.error("Save template error:", error);
@@ -74,8 +90,10 @@ export const getTemplate = async (req, res) => {
       serviceId,
     });
 
-    return res.json(template);
+    return res.status(200).json(template || {});
   } catch (error) {
+    console.error("Get template error:", error);
+
     return res.status(500).json({
       success: false,
       message: error.message,
