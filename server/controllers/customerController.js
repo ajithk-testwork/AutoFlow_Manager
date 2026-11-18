@@ -1,15 +1,14 @@
 import Customer from "../models/Customer.js";
 import Payment from "../models/Payment.js";
-import Service from "../models/Service.js"
+import Service from "../models/Service.js";
 
 export const getMonthKey = () => {
   const date = new Date();
 
   return `${date.toLocaleString("en-US", {
-    month: "long"
+    month: "long",
   })} ${date.getFullYear()}`;
 };
-
 
 export const getDashboardSummary = async (req, res) => {
   try {
@@ -76,22 +75,16 @@ export const getDashboardSummary = async (req, res) => {
 
     const expected = payments.reduce(
       (sum, payment) => sum + (Number(payment.amount) || 0),
-      0
+      0,
     );
 
     const collected = payments
       .filter((payment) => payment.status === "Paid")
-      .reduce(
-        (sum, payment) => sum + (Number(payment.amount) || 0),
-        0
-      );
+      .reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
 
     const pending = payments
       .filter((payment) => payment.status === "Pending")
-      .reduce(
-        (sum, payment) => sum + (Number(payment.amount) || 0),
-        0
-      );
+      .reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
 
     return res.status(200).json({
       success: true,
@@ -121,9 +114,6 @@ export const getDashboardSummary = async (req, res) => {
     });
   }
 };
-
-
-
 
 export const getCustomers = async (req, res) => {
   try {
@@ -163,51 +153,34 @@ export const getCustomers = async (req, res) => {
   }
 };
 
-
-
-export const getCustomerHistory = async (
-  req,
-  res
-) => {
-
+export const getCustomerHistory = async (req, res) => {
   try {
-
     const history = await Payment.find({
-
       tenantId: req.user.tenantId,
 
-      customerId: req.params.id
-
+      customerId: req.params.id,
     })
 
       .populate(
         "customerId",
-        "name phone doorNumber vehicleName  monthlyAmount"
+        "name phone doorNumber vehicleName  monthlyAmount",
       )
 
       .sort({
-        createdAt: -1
+        createdAt: -1,
       });
 
     res.json(history);
-
   } catch {
-
     res.status(500).json({
-      message: "Server Error"
+      message: "Server Error",
     });
-
   }
-
 };
-
 
 export const addCustomer = async (req, res) => {
   try {
-    const {
-      month,
-      ...customerData
-    } = req.body;
+    const { month, ...customerData } = req.body;
 
     if (!month) {
       return res.status(400).json({
@@ -216,33 +189,33 @@ export const addCustomer = async (req, res) => {
       });
     }
 
-    // Create new customer
     const newCustomer = await Customer.create({
       ...customerData,
-
       tenantId: req.user.tenantId,
-
-      // Welcome message tracking
       welcomeMessageSent: false,
       welcomeMessageSentAt: null,
     });
 
-    // Create initial payment
-    await Payment.create({
+    // Create initial payment with customer snapshot
+    const newPayment = await Payment.create({
       tenantId: req.user.tenantId,
-
       serviceId: newCustomer.serviceId,
-
       customerId: newCustomer._id,
 
       month: month.trim(),
 
-      amount: newCustomer.monthlyAmount,
+      // Snapshot details
+      customerName: newCustomer.name,
+      customerPhone: newCustomer.phone,
+      customerDoorNumber: newCustomer.doorNumber || "",
+      customerVehicleName: newCustomer.vehicleName || "",
+
+      // Original monthly amount
+      baseAmount: Number(newCustomer.monthlyAmount),
+      amount: Number(newCustomer.monthlyAmount),
 
       status: "Pending",
-
       dailyStatus: [],
-
       missedDays: 0,
     });
 
@@ -250,8 +223,8 @@ export const addCustomer = async (req, res) => {
       success: true,
       message: "Customer added successfully",
       customer: newCustomer,
+      payment: newPayment,
     });
-
   } catch (error) {
     console.error("Error adding customer:", error);
 
@@ -262,394 +235,291 @@ export const addCustomer = async (req, res) => {
   }
 };
 
-
-export const deleteCustomer = async (
-  req,
-  res
-) => {
-
+export const deleteCustomer = async (req, res) => {
   try {
-
     await Customer.findOneAndDelete({
-
       _id: req.params.id,
 
-      tenantId: req.user.tenantId
-
+      tenantId: req.user.tenantId,
     });
 
     res.json({
-      message: "Deleted"
+      message: "Deleted",
     });
-
   } catch {
-
     res.status(500).json({
-      message: "Delete failed"
+      message: "Delete failed",
     });
-
   }
-
 };
 
-export const togglePayment = async (
-  req,
-  res
-) => {
-
+export const togglePayment = async (req, res) => {
   try {
-
     const payment = await Payment.findOne({
-
       _id: req.params.id,
 
-      tenantId: req.user.tenantId
-
+      tenantId: req.user.tenantId,
     });
 
     if (!payment) {
-
       return res.status(404).json({
-        message: "Payment not found"
+        message: "Payment not found",
       });
-
     }
 
     if (payment.status === "Pending") {
-
       payment.status = "Paid";
 
-      payment.paidDate =
-        new Date().toLocaleDateString(
-          "en-CA"
-        );
-
+      payment.paidDate = new Date().toLocaleDateString("en-CA");
     } else {
-
       payment.status = "Pending";
 
       payment.paidDate = null;
-
     }
 
     await payment.save();
 
     res.json(payment);
-
   } catch {
-
     res.status(500).json({
-      message: "Toggle failed"
+      message: "Toggle failed",
     });
-
   }
-
 };
 
-export const getPaymentsByMonth = async (
-  req,
-  res
-) => {
-
+export const getPaymentsByMonth = async (req, res) => {
   try {
-
     let { month } = req.query;
 
     if (!month) {
-
       return res.status(400).json({
-        message: "Month is required"
+        message: "Month is required",
       });
-
     }
 
     const payments = await Payment.find({
-
       tenantId: req.user.tenantId,
 
-      month: month.trim()
-
+      month: month.trim(),
     })
 
       .populate(
         "customerId",
-        "name phone doorNumber vehicleName monthlyAmount gender isActive"
+        "name phone doorNumber vehicleName monthlyAmount gender isActive",
       );
 
     res.json(payments);
-
   } catch {
-
     res.status(500).json({
-      message: "Error fetching payments"
+      message: "Error fetching payments",
     });
-
   }
-
 };
 
-export const getSinglePayment = async (
-  req,
-  res
-) => {
-
+export const getSinglePayment = async (req, res) => {
   try {
-
     const payment = await Payment.findOne({
-
       _id: req.params.id,
 
-      tenantId: req.user.tenantId
-
+      tenantId: req.user.tenantId,
     });
 
     if (!payment) {
-
       return res.status(404).json({
-        message: "Payment not found"
+        message: "Payment not found",
       });
-
     }
 
     res.json(payment);
-
   } catch {
-
     res.status(500).json({
-      message: "Error fetching payment"
+      message: "Error fetching payment",
     });
-
   }
-
 };
 
-export const startNewMonth = async (
-  req,
-  res
-) => {
-
+export const startNewMonth = async (req, res) => {
   try {
+    let { month, serviceId } = req.body;
 
-    const customers = await Customer.find({
-
-      tenantId: req.user.tenantId,
-
-      isActive: true
-
-    });
-
-    let newMonth = req.body.month;
-
-    if (!newMonth) {
-
+    if (!month) {
       return res.status(400).json({
-        message: "Month is required"
+        message: "Month is required",
       });
-
     }
 
-    newMonth = newMonth.trim();
+    month = month.trim();
 
-    const existingPayments =
-      await Payment.find({
+    const tenantId = req.user.tenantId;
 
-        tenantId: req.user.tenantId,
+    // Keep existing website compatibility:
+    // If serviceId is provided, sync only that service.
+    const customerFilter = {
+      tenantId,
+      isActive: true,
+    };
 
-        month: newMonth
+    const paymentFilter = {
+      tenantId,
+      month,
+    };
 
-      });
+    if (serviceId) {
+      customerFilter.serviceId = serviceId;
+      paymentFilter.serviceId = serviceId;
+    }
 
-    const existingCustomerIds =
-      existingPayments.map(
-        p => p.customerId.toString()
-      );
+    const customers = await Customer.find(customerFilter);
+
+    const existingPayments = await Payment.find(paymentFilter);
+
+    const existingCustomerIds = new Set(
+      existingPayments.map((payment) => payment.customerId.toString()),
+    );
 
     const newPayments = customers
+      .filter((customer) => !existingCustomerIds.has(customer._id.toString()))
+      .map((customer) => ({
+        tenantId,
+        serviceId: customer.serviceId,
+        customerId: customer._id,
 
-      .filter(c =>
-        !existingCustomerIds.includes(
-          c._id.toString()
-        )
-      )
+        month,
 
-      .map(c => ({
+        // Snapshot details
+        customerName: customer.name,
+        customerPhone: customer.phone,
+        customerDoorNumber: customer.doorNumber || "",
+        customerVehicleName: customer.vehicleName || "",
 
-        tenantId: req.user.tenantId,
-
-        serviceId: c.serviceId,
-
-        customerId: c._id,
-
-        month: newMonth,
-
-        amount: c.monthlyAmount,
+        // Preserve this month's original amount
+        baseAmount: Number(customer.monthlyAmount),
+        amount: Number(customer.monthlyAmount),
 
         status: "Pending",
-
         dailyStatus: [],
-
-        missedDays: 0
-
+        missedDays: 0,
       }));
 
     if (newPayments.length > 0) {
-
       await Payment.insertMany(newPayments);
-
     }
 
-    res.json({
-      message: "Month synced successfully"
+    return res.json({
+      success: true,
+      message: "Month synced successfully",
+      createdPayments: newPayments.length,
     });
+  } catch (error) {
+    console.error("Start New Month Error:", error);
 
-  } catch {
-
-    res.status(500).json({
-      message: "Error creating month"
+    return res.status(500).json({
+      message: "Error creating month",
     });
-
   }
-
 };
 
-export const updateDailyStatus = async (
-  req,
-  res
-) => {
-
+export const updateDailyStatus = async (req, res) => {
   try {
-
-    let {
-      paymentId,
-      date,
-      status,
-      month
-    } = req.body;
+    let { paymentId, date, status, month } = req.body;
 
     const payment = await Payment.findOne({
-
       _id: paymentId,
 
-      tenantId: req.user.tenantId
-
+      tenantId: req.user.tenantId,
     }).populate("customerId");
 
     if (!payment) {
-
       return res.status(404).json({
-        message: "Payment not found"
+        message: "Payment not found",
       });
-
     }
 
-    const formattedDate =
-      new Date(date)
-        .toISOString()
-        .split("T")[0];
+    const formattedDate = new Date(date).toISOString().split("T")[0];
 
-    const existing =
-      payment.dailyStatus.find(
-        d => d.date === formattedDate
-      );
+    const existing = payment.dailyStatus.find((d) => d.date === formattedDate);
 
     if (status === "None") {
-
-      payment.dailyStatus =
-        payment.dailyStatus.filter(
-          d => d.date !== formattedDate
-        );
-
+      payment.dailyStatus = payment.dailyStatus.filter(
+        (d) => d.date !== formattedDate,
+      );
     } else {
-
       if (existing) {
-
         existing.status = status;
-
       } else {
-
         payment.dailyStatus.push({
           date: formattedDate,
-          status
+          status,
         });
-
       }
-
     }
 
-    const missedDays =
-      payment.dailyStatus.filter(
-        d => d.status === "Missed"
-      ).length;
+    const missedDays = payment.dailyStatus.filter(
+      (d) => d.status === "Missed",
+    ).length;
 
     payment.missedDays = missedDays;
 
-    let targetMonth =
-      month || payment.month;
+    let targetMonth = month || payment.month;
 
-    const [monthName, yearStr] =
-      targetMonth.trim().split(" ");
+    const [monthName, yearStr] = targetMonth.trim().split(" ");
 
     const year = parseInt(yearStr);
 
-    const monthIndex =
-      new Date(
-        Date.parse(
-          `${monthName} 1, ${year}`
-        )
-      ).getMonth();
+    const monthIndex = new Date(
+      Date.parse(`${monthName} 1, ${year}`),
+    ).getMonth();
 
-    const daysInMonth =
-      new Date(
-        year,
-        monthIndex + 1,
-        0
-      ).getDate();
+    const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
 
     const monthlyAmount =
-      payment.customerId.monthlyAmount;
+      Number(payment.baseAmount) ||
+      Number(payment.customerId?.monthlyAmount) ||
+      0;
 
-    const perDay =
-      monthlyAmount / daysInMonth;
+    // Backfill snapshot for older payment records when possible
+    if (!payment.baseAmount) {
+      payment.baseAmount = monthlyAmount;
+    }
 
-    let finalAmount = Math.round(
+    if (!payment.customerName && payment.customerId) {
+      payment.customerName = payment.customerId.name || "";
+    }
 
-      monthlyAmount -
+    if (!payment.customerPhone && payment.customerId) {
+      payment.customerPhone = payment.customerId.phone || "";
+    }
 
-      (missedDays * perDay)
+    if (!payment.customerDoorNumber && payment.customerId) {
+      payment.customerDoorNumber = payment.customerId.doorNumber || "";
+    }
 
-    );
+    if (!payment.customerVehicleName && payment.customerId) {
+      payment.customerVehicleName = payment.customerId.vehicleName || "";
+    }
 
-    finalAmount =
-      Math.max(0, finalAmount);
+    const perDay = monthlyAmount / daysInMonth;
+
+    let finalAmount = Math.round(monthlyAmount - missedDays * perDay);
+
+    finalAmount = Math.max(0, finalAmount);
 
     payment.amount = finalAmount;
 
     await payment.save();
 
     res.json(payment);
-
   } catch (error) {
-
-    console.error(
-      "Error updating daily status:",
-      error
-    );
+    console.error("Error updating daily status:", error);
 
     res.status(500).json({
-      message: "Error updating daily status"
+      message: "Error updating daily status",
     });
-
   }
-
 };
 
-export const updateCustomer = async (
-  req,
-  res
-) => {
-
+export const updateCustomer = async (req, res) => {
   try {
-
     const {
       name,
       phone,
@@ -657,97 +527,70 @@ export const updateCustomer = async (
       vehicleName,
       monthlyAmount,
       gender,
-      month
+      month,
     } = req.body;
 
-    const updatedCustomer =
-      await Customer.findOneAndUpdate(
+    const updatedCustomer = await Customer.findOneAndUpdate(
+      {
+        _id: req.params.id,
 
-        {
-          _id: req.params.id,
+        tenantId: req.user.tenantId,
+      },
 
-          tenantId: req.user.tenantId
-        },
+      {
+        name,
+        phone,
+        doorNumber,
+        vehicleName,
+        monthlyAmount,
+        gender,
+      },
 
-        {
-          name,
-          phone,
-          doorNumber,
-          vehicleName,
-          monthlyAmount,
-          gender
-        },
-
-        {
-          new: true
-        }
-
-      );
+      {
+        new: true,
+      },
+    );
 
     if (month) {
+      const payment = await Payment.findOne({
+        tenantId: req.user.tenantId,
 
-      const payment =
-        await Payment.findOne({
+        customerId: req.params.id,
 
-          tenantId: req.user.tenantId,
-
-          customerId: req.params.id,
-
-          month: month
-
-        });
+        month: month,
+      });
 
       if (payment) {
+        const [monthName, yearStr] = month.trim().split(" ");
 
-        const [
-          monthName,
-          yearStr
-        ] = month.trim().split(" ");
+        const monthIndex = new Date(
+          Date.parse(`${monthName} 1, ${yearStr}`),
+        ).getMonth();
 
-        const monthIndex =
-          new Date(
-            Date.parse(
-              `${monthName} 1, ${yearStr}`
-            )
-          ).getMonth();
+        const daysInMonth = new Date(
+          parseInt(yearStr),
+          monthIndex + 1,
+          0,
+        ).getDate();
 
-        const daysInMonth =
-          new Date(
-            parseInt(yearStr),
-            monthIndex + 1,
-            0
-          ).getDate();
-
-        const perDay =
-          monthlyAmount / daysInMonth;
+        const perDay = monthlyAmount / daysInMonth;
 
         let finalAmount = Math.round(
-
-          monthlyAmount -
-
-          (payment.missedDays * perDay)
-
+          monthlyAmount - payment.missedDays * perDay,
         );
 
-        payment.amount =
-          Math.max(0, finalAmount);
+        payment.amount = Math.max(0, finalAmount);
 
         await payment.save();
-
       }
-
     }
 
     res.json(updatedCustomer);
-
   } catch {
-
     res.status(500).json({
-      message: "Update failed"
+      message: "Update failed",
     });
-
   }
-
 };
 
 export const getGlobalHistory = async (req, res) => {
@@ -757,15 +600,15 @@ export const getGlobalHistory = async (req, res) => {
     // 1. Find customers only in this specific workspace
     const customersInService = await Customer.find({
       tenantId: req.user.tenantId,
-      serviceId: serviceId
+      serviceId: serviceId,
     });
 
-    const customerIds = customersInService.map(c => c._id);
+    const customerIds = customersInService.map((c) => c._id);
 
     // 2. Fetch the raw payment data for these customers
     const payments = await Payment.find({
-      customerId: { $in: customerIds }
-    }).populate('customerId');
+      customerId: { $in: customerIds },
+    }).populate("customerId");
 
     // 3. THE MISSING LOGIC: Group the payments by month so the frontend can read it
     const groupedHistory = {};
@@ -777,7 +620,7 @@ export const getGlobalHistory = async (req, res) => {
           month: payment.month,
           collected: 0,
           pending: 0,
-          payments: []
+          payments: [],
         };
       }
 
@@ -795,7 +638,6 @@ export const getGlobalHistory = async (req, res) => {
     // 4. Convert our grouped object into a clean array and send it to the frontend
     const result = Object.values(groupedHistory);
     res.json(result);
-
   } catch (error) {
     console.error("Global History Error:", error);
     res.status(500).json({ message: "Failed to fetch global history" });
