@@ -221,8 +221,17 @@ export default function PaymentsScreen() {
         setTemplates(DEFAULT_TEMPLATES);
       }
 
-      const trackerKey = `autoflow_waTracker_${month}`;
+      const getSafeTrackerKey = (month: string) => {
+        const safeMonth = month.trim().replace(/[^a-zA-Z0-9._-]/g, "_");
+
+        return `autoflow_waTracker_${safeMonth}`;
+      };
+
+      const trackerKey = getSafeTrackerKey(month);
+
       const tracker = await SecureStore.getItemAsync(trackerKey);
+
+      setWaTracker(tracker ? JSON.parse(tracker) : {});
       setWaTracker(tracker ? JSON.parse(tracker) : {});
     } catch (err: any) {
       console.log("Payment loading error:", err.response?.data || err.message);
@@ -456,29 +465,31 @@ export default function PaymentsScreen() {
   const filteredCustomers = useMemo(() => {
     const term = search.trim().toLowerCase();
 
-    return customers
-      .filter((customer) => {
-        const matchesSearch =
-          !term ||
-          customer.name?.toLowerCase().includes(term) ||
-          customer.phone?.toLowerCase().includes(term) ||
-          customer.vehicleName?.toLowerCase().includes(term) ||
-          customer.doorNumber?.toLowerCase().includes(term);
+    return (
+      customers
+        .filter((customer) => {
+          const matchesSearch =
+            !term ||
+            customer.name?.toLowerCase().includes(term) ||
+            customer.phone?.toLowerCase().includes(term) ||
+            customer.vehicleName?.toLowerCase().includes(term) ||
+            customer.doorNumber?.toLowerCase().includes(term);
 
-        const matchesStatus =
-          filter === "ALL" ||
-          (filter === "PAID" && customer.status === "Paid") ||
-          (filter === "PENDING" && isUnpaid(customer.status));
+          const matchesStatus =
+            filter === "ALL" ||
+            (filter === "PAID" && customer.status === "Paid") ||
+            (filter === "PENDING" && isUnpaid(customer.status));
 
-        return matchesSearch && matchesStatus;
-      })
-      // Unpaid customers first so the work left to do is always at the top.
-      .sort((a, b) => {
-        const au = isUnpaid(a.status) ? 0 : 1;
-        const bu = isUnpaid(b.status) ? 0 : 1;
-        if (au !== bu) return au - bu;
-        return a.name.localeCompare(b.name);
-      });
+          return matchesSearch && matchesStatus;
+        })
+        // Unpaid customers first so the work left to do is always at the top.
+        .sort((a, b) => {
+          const au = isUnpaid(a.status) ? 0 : 1;
+          const bu = isUnpaid(b.status) ? 0 : 1;
+          if (au !== bu) return au - bu;
+          return a.name.localeCompare(b.name);
+        })
+    );
   }, [customers, search, filter]);
 
   const filterOptions: { key: FilterKey; label: string; count: number }[] = [
@@ -595,8 +606,8 @@ export default function PaymentsScreen() {
                 You’re viewing a past month
               </Text>
               <Text className="mt-1 text-xs leading-4 text-amber-700">
-                Payments and daily service for {selectedMonth} can’t be
-                changed. You can still send WhatsApp messages.
+                Payments and daily service for {selectedMonth} can’t be changed.
+                You can still send WhatsApp messages.
               </Text>
             </View>
           )}
@@ -842,7 +853,9 @@ export default function PaymentsScreen() {
                       <View className="mx-4 rounded-2xl bg-slate-50 p-3">
                         <View className="flex-row items-center justify-between">
                           <Text className="text-sm font-bold text-slate-800">
-                            {customer.readOnly ? "Service summary" : "Today’s service"}
+                            {customer.readOnly
+                              ? "Service summary"
+                              : "Today’s service"}
                           </Text>
                           {customer.missedDays > 0 && (
                             <View className="rounded-full bg-red-50 px-2.5 py-0.5">
@@ -967,11 +980,15 @@ export default function PaymentsScreen() {
                             <TouchableOpacity
                               onPress={() => sendWhatsApp(customer, "request")}
                               className={`flex-1 items-center rounded-xl py-3 ${
-                                tracked("request") ? "bg-blue-100" : "bg-blue-50"
+                                tracked("request")
+                                  ? "bg-blue-100"
+                                  : "bg-blue-50"
                               }`}
                             >
                               <Text className="text-xs font-bold text-blue-700">
-                                {tracked("request") ? "Bill sent ✓" : "Send bill"}
+                                {tracked("request")
+                                  ? "Bill sent ✓"
+                                  : "Send bill"}
                               </Text>
                             </TouchableOpacity>
 

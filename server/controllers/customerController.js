@@ -655,3 +655,53 @@ export const getGlobalHistory = async (req, res) => {
   }
 };
 
+
+export const markWelcomeSent = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { serviceId } = req.body;
+
+    if (!serviceId) {
+      return res.status(400).json({
+        success: false,
+        message: "Service ID is required",
+      });
+    }
+
+    const customer = await Customer.findOneAndUpdate(
+      {
+        _id: id,
+        tenantId: req.user.tenantId,
+        serviceId,
+      },
+      {
+        $set: {
+          welcomeMessageSent: true,
+          welcomeMessageSentAt: new Date(),
+        },
+      },
+      { new: true }
+    );
+
+    if (!customer) {
+      return res.status(404).json({
+        success: false,
+        message: "Customer not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Welcome status updated",
+      customer,
+    });
+
+  } catch (error) {
+    console.error("Welcome status error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
