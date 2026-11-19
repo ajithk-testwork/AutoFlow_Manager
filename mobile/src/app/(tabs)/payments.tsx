@@ -15,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, router } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { api } from "../../api/client";
+import AutoFlowFeedback from "@/components/AutoFlowFeedback";
 
 /* ───────────────────────────── Types ───────────────────────────── */
 
@@ -69,14 +70,43 @@ type FilterKey = "ALL" | "PENDING" | "PAID";
 /* ───────────────────────────── Constants ───────────────────────────── */
 
 const DEFAULT_TEMPLATES: WhatsAppTemplates = {
-  requestTemplate:
-    "Hello {{name}},\n\n📅 Billing Month: {{month}}\n\n🚗 Service Report:\nMissed Days: {{missedDays}}\nDates Missed: {{missedDates}}\n\n✅ Final Amount Due: ₹{{amount}}\n\n💳 Payment Options:\n\n🔹 UPI ID:\n{{upi}}\n\n🔹 GPay / PhonePe:\n{{phone}}\n\nThank you! 🚗✨",
+  requestTemplate: `Hello {{name}},
 
-  reminderTemplate:
-    "Hello {{name}},\n\nThis is a gentle reminder that your payment for {{month}} is still pending.\n\n💰 Final Amount Due: ₹{{amount}}\n\n💳 Payment Options:\n\n🔹 UPI ID:\n{{upi}}\n\n🔹 GPay / PhonePe:\n{{phone}}\n\nThank you! 🚗",
+📅 Billing Month: {{month}}
 
-  thankyouTemplate:
-    "Hello {{name}},\n\nWe have received your payment of ₹{{amount}} for {{month}}.\n\nThank you for choosing us! 🚗✨",
+🚗 Service Report:
+Missed Days: {{missedDays}}
+Dates Missed: {{missedDates}}
+
+✅ Final Amount Due: ₹{{amount}}
+
+💳 Payment Options:
+
+🔹 UPI ID:
+{{upi}}
+
+🔹 GPay / PhonePe:
+{{phone}}
+
+Thank you! 🚗✨`,
+
+  reminderTemplate: `Hello {{name}},
+
+Your payment for {{month}} is still pending.
+
+Final Amount Due: ₹{{amount}}
+
+Payment Options:
+UPI ID: {{upi}}
+GPay / PhonePe: {{phone}}
+
+Thank you! 🚗`,
+
+  thankyouTemplate: `Hello {{name}},
+
+We have received your payment of ₹{{amount}} for {{month}}.
+
+Thank you for choosing our service! 🚗✨`,
 
   upiId: "",
   phone: "",
@@ -201,20 +231,42 @@ export default function PaymentsScreen() {
         const templateResponse = await api.get(
           `/whatsapp-template/${savedServiceId}`,
         );
-        const saved = templateResponse.data;
-        setTemplates(
-          saved
-            ? {
-                requestTemplate:
-                  saved.requestTemplate || DEFAULT_TEMPLATES.requestTemplate,
-                reminderTemplate:
-                  saved.reminderTemplate || DEFAULT_TEMPLATES.reminderTemplate,
-                thankyouTemplate:
-                  saved.thankyouTemplate || DEFAULT_TEMPLATES.thankyouTemplate,
-                upiId: saved.upiId || "",
-                phone: saved.phone || "",
-              }
-            : DEFAULT_TEMPLATES,
+
+        console.log("PAYMENT TEMPLATE API RESPONSE:", templateResponse.data);
+
+        // Backend response is { success: true, data: {...} }
+        const saved =
+          templateResponse.data?.data ?? templateResponse.data ?? {};
+
+        console.log("SAVED PAYMENT TEMPLATES:", saved);
+
+        const loadedTemplates: WhatsAppTemplates = {
+          requestTemplate:
+            saved.requestTemplate?.trim() || DEFAULT_TEMPLATES.requestTemplate,
+
+          reminderTemplate:
+            saved.reminderTemplate?.trim() ||
+            DEFAULT_TEMPLATES.reminderTemplate,
+
+          thankyouTemplate:
+            saved.thankyouTemplate?.trim() ||
+            DEFAULT_TEMPLATES.thankyouTemplate,
+
+          upiId: saved.upiId || "",
+
+          phone: saved.phone || "",
+        };
+
+        setTemplates(loadedTemplates);
+
+        console.log("FINAL REQUEST TEMPLATE:", loadedTemplates.requestTemplate);
+        console.log(
+          "FINAL REMINDER TEMPLATE:",
+          loadedTemplates.reminderTemplate,
+        );
+        console.log(
+          "FINAL THANKYOU TEMPLATE:",
+          loadedTemplates.thankyouTemplate,
         );
       } catch (templateError) {
         console.log("Template loading failed:", templateError);
@@ -370,68 +422,134 @@ export default function PaymentsScreen() {
       ?.status || null;
 
   /* ── WhatsApp ── */
+
   const sendWhatsApp = async (
     customer: PaymentCustomer,
     type: "request" | "reminder" | "thankyou",
   ) => {
-    if (!customer.phone) {
-      Alert.alert("Phone missing", "This customer has no phone number.");
-      return;
-    }
-
-    const rawTemplate =
-      type === "request"
-        ? templates.requestTemplate
-        : type === "reminder"
-          ? templates.reminderTemplate
-          : templates.thankyouTemplate;
-
-    const honorific =
-      customer.gender?.toLowerCase() === "female" ? " Ma'am" : " Sir";
-
-    const missedDates = customer.dailyStatus
-      .filter((item) => item.status === "Missed")
-      .map((item) => formatDate(item.date))
-      .join(", ");
-
-    const message = rawTemplate
-      .replace(/{{name}}/g, `${customer.name}${honorific}`)
-      .replace(/{{month}}/g, selectedMonth)
-      .replace(/{{missedDays}}/g, String(customer.missedDays))
-      .replace(/{{missedDates}}/g, missedDates || "None")
-      .replace(/{{amount}}/g, Number(customer.amount).toLocaleString("en-IN"))
-      .replace(/{{upi}}/g, templates.upiId || "Not Provided")
-      .replace(/{{phone}}/g, templates.phone || "Not Provided");
-
-    let cleanPhone = customer.phone.replace(/\D/g, "");
-    if (cleanPhone.length === 10) cleanPhone = `91${cleanPhone}`;
-
-    if (cleanPhone.length < 10) {
-      Alert.alert(
-        "Invalid phone number",
-        "Check the customer’s phone number and try again.",
-      );
-      return;
-    }
-
-    const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
-
     try {
+      if (!customer.phone?.trim()) {
+        Alert.alert("Phone missing", "This customer has no phone number.");
+        return;
+      }
+
+      const [savedServiceId, savedMonth] = await Promise.all([
+        SecureStore.getItemAsync("autoflow_service_id"),
+        SecureStore.getItemAsync("autoflow_selected_month"),
+      ]);
+      if (!savedServiceId) throw new Error("Selected service not found.");
+
+      if (
+        customer.serviceId &&
+        String(customer.serviceId) !== String(savedServiceId)
+      ) {
+        throw new Error("Customer and selected service do not match.");
+      }
+
+      // Always fetch the latest server-side template/payment details for this service.
+      const response = await api.get(`/whatsapp-template/${savedServiceId}`);
+      const body = response.data?.data ?? response.data ?? {};
+      const savedTemplates = body?.template ?? body;
+
+      const templateKey =
+        type === "request"
+          ? "requestTemplate"
+          : type === "reminder"
+            ? "reminderTemplate"
+            : "thankyouTemplate";
+      const rawTemplate = savedTemplates?.[templateKey];
+
+      if (
+        type !== "thankyou" &&
+        !savedTemplates?.upiId?.trim() &&
+        !savedTemplates?.phone?.trim()
+      ) {
+        Alert.alert(
+          "Payment details missing",
+          "Open Settings, enter your UPI ID or GPay / PhonePe number, and tap Save changes before sending the bill.",
+        );
+        return;
+      }
+
+      if (typeof rawTemplate !== "string" || !rawTemplate.trim()) {
+        Alert.alert(
+          "Template missing",
+          `${type} message template is empty. Open Settings and save it first.`,
+        );
+        return;
+      }
+
+      const honorific =
+        customer.gender?.toLowerCase() === "female" ? " Ma'am" : " Sir";
+      const missedDates = (customer.dailyStatus || [])
+        .filter((item) => item.status?.toLowerCase() === "missed")
+        .map((item) => formatDate(item.date))
+        .join(", ");
+
+      const monthForMessage = savedMonth || selectedMonth;
+      const replacements: Record<string, string> = {
+        name: `${customer.name || "Customer"}${honorific}`,
+        service: customer.vehicleName || "our service",
+        month: monthForMessage,
+        missedDays: String(Number(customer.missedDays || 0)),
+        missedDates: missedDates || "None",
+        amount: Number(customer.amount || 0).toLocaleString("en-IN"),
+        upi: savedTemplates.upiId?.trim() || "Not Provided",
+        phone: savedTemplates.phone?.trim() || "Not Provided",
+      };
+
+      // Match keys case-insensitively (e.g. missedDays -> misseddays).
+      const normalizedReplacements = Object.fromEntries(
+        Object.entries(replacements).map(([key, value]) => [
+          key.toLowerCase(),
+          value,
+        ]),
+      ) as Record<string, string>;
+
+      const message = rawTemplate.replace(
+        /{{\s*(name|service|month|missedDays|missedDates|amount|upi|phone)\s*}}/gi,
+        (_match, key: string) =>
+          normalizedReplacements[key.toLowerCase()] ?? _match,
+      );
+
+      // Do not silently send a template with unresolved placeholders.
+      const unresolved = message.match(/{{\s*[^{}]+\s*}}/g);
+      if (unresolved?.length) {
+        Alert.alert(
+          "Template placeholders",
+          `Please check these placeholders in Settings: ${unresolved.join(", ")}`,
+        );
+        return;
+      }
+
+      let cleanPhone = customer.phone.replace(/\D/g, "");
+      if (cleanPhone.length === 10) cleanPhone = `91${cleanPhone}`;
+      if (!/^\d{10,15}$/.test(cleanPhone)) {
+        Alert.alert(
+          "Invalid phone number",
+          "Please check the customer's phone number.",
+        );
+        return;
+      }
+
+      const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
       await Linking.openURL(url);
 
-      const trackerKey = `${selectedMonth}-${customer._id}-${type}`;
+      // This tracker means WhatsApp was opened with a prefilled message; it does NOT
+      // confirm that the user pressed Send inside WhatsApp.
+      const trackerKey = `${monthForMessage}-${customer._id}-${type}`;
       const updatedTracker = { ...waTracker, [trackerKey]: true };
-
       setWaTracker(updatedTracker);
-
+      const safeMonth = monthForMessage.trim().replace(/[^a-zA-Z0-9._-]/g, "_");
       await SecureStore.setItemAsync(
-        `autoflow_waTracker_${selectedMonth}`,
+        `autoflow_waTracker_${safeMonth}`,
         JSON.stringify(updatedTracker),
       );
-    } catch (err) {
+    } catch (err: any) {
+      console.log("WHATSAPP OPEN ERROR:", err.response?.data || err.message);
       Alert.alert(
         "WhatsApp unavailable",
-        "WhatsApp couldn’t be opened on this device.",
+        err.response?.data?.message || err.message || "Please try again.",
       );
     }
   };
@@ -520,35 +638,26 @@ export default function PaymentsScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50">
-        <ActivityIndicator size="large" color="#2563EB" />
-        <Text className="mt-3 text-sm text-slate-500">Loading payments…</Text>
-      </SafeAreaView>
+      <AutoFlowFeedback
+        mode="loading"
+        title="Loading payments"
+        message="Fetching your customer payments. Please wait..."
+      />
     );
   }
 
   if (error && customers.length === 0) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50 px-5">
-        <View className="w-full rounded-3xl bg-white p-6">
-          <Text className="text-center text-4xl">📡</Text>
-          <Text className="mt-3 text-center text-xl font-bold text-slate-900">
-            Payments unavailable
-          </Text>
-          <Text className="mt-2 text-center text-sm text-slate-500">
-            {error}
-          </Text>
-          <TouchableOpacity
-            onPress={() => {
-              setLoading(true);
-              loadPayments().finally(() => setLoading(false));
-            }}
-            className="mt-5 items-center rounded-xl bg-blue-600 py-4"
-          >
-            <Text className="font-bold text-white">Try again</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
+      <AutoFlowFeedback
+        mode="error"
+        title="Unable to load payments"
+        message={error}
+        retryLabel="Try again"
+        onRetry={() => {
+          setLoading(true);
+          loadPayments().finally(() => setLoading(false));
+        }}
+      />
     );
   }
 

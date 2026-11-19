@@ -192,6 +192,7 @@ export const addCustomer = async (req, res) => {
     const newCustomer = await Customer.create({
       ...customerData,
       tenantId: req.user.tenantId,
+      welcomeMessageEligible: true,
       welcomeMessageSent: false,
       welcomeMessageSentAt: null,
     });
@@ -287,7 +288,6 @@ export const togglePayment = async (req, res) => {
   }
 };
 
-
 export const getPaymentsByMonth = async (req, res) => {
   try {
     const { month, serviceId } = req.query;
@@ -320,7 +320,7 @@ export const getPaymentsByMonth = async (req, res) => {
     })
       .populate(
         "customerId",
-        "name phone doorNumber vehicleName monthlyAmount gender isActive serviceId"
+        "name phone doorNumber vehicleName monthlyAmount gender isActive serviceId",
       )
       .sort({ createdAt: 1 });
 
@@ -334,7 +334,6 @@ export const getPaymentsByMonth = async (req, res) => {
     });
   }
 };
-
 
 export const getSinglePayment = async (req, res) => {
   try {
@@ -538,17 +537,10 @@ export const updateDailyStatus = async (req, res) => {
   }
 };
 
-
 export const updateCustomer = async (req, res) => {
   try {
-    const {
-      name,
-      phone,
-      doorNumber,
-      vehicleName,
-      monthlyAmount,
-      gender,
-    } = req.body;
+    const { name, phone, doorNumber, vehicleName, monthlyAmount, gender } =
+      req.body;
 
     const updatedCustomer = await Customer.findOneAndUpdate(
       {
@@ -566,7 +558,7 @@ export const updateCustomer = async (req, res) => {
       {
         new: true,
         runValidators: true,
-      }
+      },
     );
 
     if (!updatedCustomer) {
@@ -589,8 +581,6 @@ export const updateCustomer = async (req, res) => {
     });
   }
 };
-
-
 
 export const getGlobalHistory = async (req, res) => {
   try {
@@ -637,11 +627,9 @@ export const getGlobalHistory = async (req, res) => {
       groupedHistory[payment.month].payments.push(payment);
 
       if (payment.status === "Paid") {
-        groupedHistory[payment.month].collected +=
-          Number(payment.amount) || 0;
+        groupedHistory[payment.month].collected += Number(payment.amount) || 0;
       } else {
-        groupedHistory[payment.month].pending +=
-          Number(payment.amount) || 0;
+        groupedHistory[payment.month].pending += Number(payment.amount) || 0;
       }
     });
 
@@ -654,7 +642,6 @@ export const getGlobalHistory = async (req, res) => {
     });
   }
 };
-
 
 export const markWelcomeSent = async (req, res) => {
   try {
@@ -680,7 +667,7 @@ export const markWelcomeSent = async (req, res) => {
           welcomeMessageSentAt: new Date(),
         },
       },
-      { new: true }
+      { new: true },
     );
 
     if (!customer) {
@@ -695,7 +682,6 @@ export const markWelcomeSent = async (req, res) => {
       message: "Welcome status updated",
       customer,
     });
-
   } catch (error) {
     console.error("Welcome status error:", error);
 

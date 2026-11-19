@@ -13,6 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, router } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { api } from "../../api/client";
+import AutoFlowFeedback from "@/components/AutoFlowFeedback";
 
 /* ───────────────────────────── Types ───────────────────────────── */
 
@@ -275,40 +276,29 @@ export default function HistoryScreen() {
   /* ───────────────────────── Loading / error ───────────────────────── */
 
   if (loading) {
-    return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50">
-        <ActivityIndicator size="large" color="#2563EB" />
-        <Text className="mt-3 text-sm text-slate-500">Loading history…</Text>
-      </SafeAreaView>
-    );
-  }
+  return (
+    <AutoFlowFeedback
+      mode="loading"
+      title="Loading payments"
+      message="Fetching your customer payments. Please wait..."
+    />
+  );
+}
 
-  if (error && history.length === 0) {
-    return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50 px-5">
-        <View className="w-full rounded-3xl bg-white p-6">
-          <Text className="text-center text-4xl">📡</Text>
-          <Text className="mt-3 text-center text-xl font-bold text-slate-900">
-            History unavailable
-          </Text>
-
-          <Text className="mt-2 text-center text-sm text-slate-500">
-            {error}
-          </Text>
-
-          <TouchableOpacity
-            onPress={() => {
-              setLoading(true);
-              loadHistory().finally(() => setLoading(false));
-            }}
-            className="mt-5 items-center rounded-xl bg-blue-600 py-4"
-          >
-            <Text className="font-bold text-white">Try again</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
+ if (error && history.length === 0) {
+  return (
+    <AutoFlowFeedback
+      mode="error"
+      title="Unable to load payments"
+      message={error}
+      retryLabel="Try again"
+      onRetry={() => {
+        setLoading(true);
+        loadHistory().finally(() => setLoading(false));
+      }}
+    />
+  );
+}
 
   const filterOptions: { key: StatusFilter; label: string }[] = [
     { key: "ALL", label: "All" },

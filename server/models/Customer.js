@@ -1,4 +1,3 @@
-
 import mongoose from "mongoose";
 
 const customerSchema = new mongoose.Schema(
@@ -55,13 +54,18 @@ const customerSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // Only newly added customers are eligible
+    welcomeMessageEligible: {
+      type: Boolean,
+      default: false,
+    },
 
     welcomeMessageSentAt: {
       type: Date,
       default: null,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 // Indexes

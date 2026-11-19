@@ -23,6 +23,7 @@ import * as SecureStore from "expo-secure-store";
 import { Feather } from "@expo/vector-icons";
 
 import { api } from "../../api/client";
+import AutoFlowFeedback from "@/components/AutoFlowFeedback";
 
 /* ───────────────────────────── Types ───────────────────────────── */
 
@@ -63,27 +64,7 @@ Thank you for choosing us. We look forward to serving you!
 
 Team AutoFlow`,
 
-  requestTemplate: `Hi {{name}},
-
-
-
-Your {{month}} service bill is ready.
-
-
-
-Amount: ₹{{amount}}
-
-
-
-UPI: {{upi}}
-
-
-
-Kindly complete your payment.
-
-
-
-Thank you!`,
+  requestTemplate: `Hello {{name}},\n\n📅 Billing Month: {{month}}\n\n🚗 Service Report:\nMissed Days: {{missedDays}}\nDates Missed: {{missedDates}}\n\n✅ Final Amount Due: ₹{{amount}}\n\n💳 Payment Options:\n\n🔹 UPI ID:\n{{upi}}\n\n🔹 GPay / PhonePe:\n{{phone}}\n\nThank you! 🚗✨`,
 
   reminderTemplate: `Hi {{name}},
 
@@ -392,22 +373,23 @@ const getCurrentMonth = () => {
   return `${date.toLocaleString("en-US", { month: "long" })} ${date.getFullYear()}`;
 };
 
-const renderPreview = (text: string, template: TemplateData) =>
-  text
+const renderPreview = (text: string, template: TemplateData) => {
+  const values: Record<string, string> = {
+    name: "Ajith K Sir",
+    service: "Vehicle service",
+    month: getCurrentMonth(),
+    amount: "2,500",
+    missedDays: "0",
+    missedDates: "None",
+    upi: template.upiId?.trim() || "Not Provided",
+    phone: template.phone?.trim() || "Not Provided",
+  };
 
-    .replace(/{{name}}/g, "Ravi Kumar Sir")
-
-    .replace(/{{month}}/g, getCurrentMonth())
-
-    .replace(/{{amount}}/g, "1,500")
-
-    .replace(/{{missedDays}}/g, "2")
-
-    .replace(/{{missedDates}}/g, "04 Nov, 11 Nov")
-
-    .replace(/{{upi}}/g, template.upiId || "yourname@upi")
-
-    .replace(/{{phone}}/g, template.phone || "98765 43210");
+  return text.replace(
+    /{{\s*(name|service|month|amount|missedDays|missedDates|upi|phone)\s*}}/gi,
+    (_match, key: string) => values[key.toLowerCase()] ?? _match,
+  );
+};
 
 const isValidUpi = (value: string) =>
   /^[a-zA-Z0-9._-]{2,}@[a-zA-Z0-9.-]{2,}$/.test(value);
@@ -583,44 +565,26 @@ export default function SettingsScreen() {
 
       const response = await api.get(`/whatsapp-template/${storedServiceId}`);
 
-      console.log("SETTINGS TEMPLATE API RESPONSE:", response.data);
-
-      // Support both old and new backend response formats
-      const dbTemplate = response.data?.data ?? response.data ?? {};
-
-      const hasSavedWelcomeTemplate =
-        typeof dbTemplate.welcomeTemplate === "string" &&
-        dbTemplate.welcomeTemplate.trim().length > 0;
+      // Support direct response and { success, data } / { data: { template } }.
+      const responseBody = response.data?.data ?? response.data ?? {};
+      const savedTemplate = responseBody?.template ?? responseBody;
 
       const loaded: TemplateData = {
-        welcomeTemplate: hasSavedWelcomeTemplate
-          ? dbTemplate.welcomeTemplate
-          : defaultTemplates.welcomeTemplate,
-
+        welcomeTemplate:
+          savedTemplate.welcomeTemplate || defaultTemplates.welcomeTemplate,
         requestTemplate:
-          dbTemplate.requestTemplate || defaultTemplates.requestTemplate,
-
+          savedTemplate.requestTemplate || defaultTemplates.requestTemplate,
         reminderTemplate:
-          dbTemplate.reminderTemplate || defaultTemplates.reminderTemplate,
-
+          savedTemplate.reminderTemplate || defaultTemplates.reminderTemplate,
         thankyouTemplate:
-          dbTemplate.thankyouTemplate || defaultTemplates.thankyouTemplate,
-
-        upiId: dbTemplate.upiId || "",
-
-        phone: dbTemplate.phone || "",
+          savedTemplate.thankyouTemplate || defaultTemplates.thankyouTemplate,
+        upiId: savedTemplate.upiId || "",
+        phone: savedTemplate.phone || "",
       };
 
       setTemplate(loaded);
 
-      // If welcome template is missing in DB,
-      // make Save Changes enabled so defaults can be persisted.
-      setSaved({
-        ...loaded,
-        welcomeTemplate: hasSavedWelcomeTemplate ? loaded.welcomeTemplate : "",
-      });
-
-      console.log("WELCOME TEMPLATE EXISTS IN DB:", hasSavedWelcomeTemplate);
+      setSaved(loaded);
 
       setErrors({});
     } catch (error: any) {
@@ -738,73 +702,69 @@ export default function SettingsScreen() {
   };
 
   const saveSettings = async () => {
-    if (!serviceId) {
-      Alert.alert("Error", "Service not selected");
-      return;
-    }
+    if (!serviceId) return;
 
     if (!validate()) return;
 
     const payload: TemplateData = {
       ...template,
-      welcomeTemplate: template.welcomeTemplate.trim(),
-      requestTemplate: template.requestTemplate.trim(),
-      reminderTemplate: template.reminderTemplate.trim(),
-      thankyouTemplate: template.thankyouTemplate.trim(),
+
       upiId: template.upiId.trim(),
+
       phone: template.phone.trim(),
     };
-
-    if (!payload.welcomeTemplate) {
-      Alert.alert("Error", "Welcome message cannot be empty");
-      return;
-    }
 
     try {
       setSaving(true);
 
-      console.log("SAVING SERVICE ID:", serviceId);
-      console.log("SAVING WELCOME TEMPLATE:", payload.welcomeTemplate);
-
-      const response = await api.post("/whatsapp-template/save", {
-        serviceId,
+      const saveResponse = await api.post("/whatsapp-template/save", {
+        serviceId: serviceId.trim(),
         ...payload,
       });
 
-      console.log("SAVE TEMPLATE RESPONSE:", response.data);
-
-      const savedData = response.data?.data ?? response.data;
-
-      if (!response.data?.success || !savedData?.welcomeTemplate?.trim()) {
-        throw new Error("Welcome template was not saved in database");
+      if (saveResponse.data?.success === false) {
+        throw new Error(saveResponse.data?.message || "Template save failed.");
       }
 
-      const confirmedTemplate: TemplateData = {
-        welcomeTemplate: savedData.welcomeTemplate,
-        requestTemplate: savedData.requestTemplate || payload.requestTemplate,
-        reminderTemplate:
-          savedData.reminderTemplate || payload.reminderTemplate,
-        thankyouTemplate:
-          savedData.thankyouTemplate || payload.thankyouTemplate,
-        upiId: savedData.upiId || payload.upiId,
-        phone: savedData.phone || payload.phone,
-      };
-
-      setTemplate(confirmedTemplate);
-      setSaved(confirmedTemplate);
-
-      showToast("WhatsApp templates saved successfully");
-    } catch (error: any) {
-      console.log(
-        "SAVE TEMPLATE ERROR:",
-        error.response?.data || error.message,
+      // Read back from the server so UI only reports success for persisted values.
+      const verifyResponse = await api.get(
+        `/whatsapp-template/${serviceId.trim()}`,
       );
+      const verifyBody = verifyResponse.data?.data ?? verifyResponse.data ?? {};
+      const db = verifyBody?.template ?? verifyBody;
+      const keys: (keyof TemplateData)[] = [
+        "welcomeTemplate",
+        "requestTemplate",
+        "reminderTemplate",
+        "thankyouTemplate",
+        "upiId",
+        "phone",
+      ];
+      const mismatches = keys.filter((key) => (db[key] ?? "") !== payload[key]);
+      if (mismatches.length) {
+        throw new Error(
+          `Saved values could not be verified: ${mismatches.join(", ")}`,
+        );
+      }
+
+      const confirmed: TemplateData = {
+        welcomeTemplate: db.welcomeTemplate,
+        requestTemplate: db.requestTemplate,
+        reminderTemplate: db.reminderTemplate,
+        thankyouTemplate: db.thankyouTemplate,
+        upiId: db.upiId ?? "",
+        phone: db.phone ?? "",
+      };
+      setTemplate(confirmed);
+      setSaved(confirmed);
+      showToast("Templates and payment details saved");
+    } catch (error: any) {
+      console.log("Save settings error:", error.response?.data || error);
 
       Alert.alert(
-        "Save failed",
-        error.response?.data?.message ||
-          error.message ||
-          "Unable to save WhatsApp templates",
+        "Couldn’t save settings",
+
+        error.response?.data?.message || error.message || "Please try again.",
       );
     } finally {
       setSaving(false);
@@ -869,19 +829,15 @@ export default function SettingsScreen() {
 
   /* ───────────────────────── Loading ───────────────────────── */
 
-  if (loading) {
-    return (
-      <SafeAreaView
-        className="flex-1 items-center justify-center bg-slate-50"
-
-        edges={["top", "bottom"]}
-      >
-        <ActivityIndicator size="large" color="#2563EB" />
-
-        <Text className="mt-3 text-sm text-slate-500">Loading settings…</Text>
-      </SafeAreaView>
-    );
-  }
+if (loading) {
+  return (
+    <AutoFlowFeedback
+      mode="loading"
+      title="Loading payments"
+      message="Fetching your customer payments. Please wait..."
+    />
+  );
+}
 
   const activeConfig = TEMPLATE_TABS.find((tab) => tab.key === activeTab)!;
 
@@ -904,7 +860,7 @@ export default function SettingsScreen() {
 
             paddingTop: 16,
 
-            paddingBottom: 130,
+            paddingBottom: 220,
           }}
 
           keyboardShouldPersistTaps="handled"
@@ -1353,7 +1309,11 @@ export default function SettingsScreen() {
 
         {/* Sticky save bar */}
 
-        <View className="absolute bottom-0 left-0 right-0 border-t border-slate-100 bg-white px-5 pb-6 pt-3">
+        {/* Keep the save action above the floating tab bar so it is always visible. */}
+        <View
+          style={{ bottom: 96, elevation: 12, zIndex: 30 }}
+          className="absolute left-0 right-0 border-t border-slate-100 bg-white px-5 pb-3 pt-3"
+        >
           <View className="mb-2 flex-row items-center justify-center">
             <View
               className={`mr-2 h-2 w-2 rounded-full ${

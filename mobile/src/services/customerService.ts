@@ -1,4 +1,3 @@
-
 import { api } from "../api/client";
 
 export interface Customer {
@@ -11,11 +10,12 @@ export interface Customer {
   gender?: string;
   serviceId: string;
   isActive?: boolean;
+  welcomeMessageEligible?: boolean;
+  welcomeMessageSent?: boolean;
+  welcomeMessageSentAt?: string | null;
 }
 
-export async function fetchCustomers(
-  serviceId: string
-): Promise<Customer[]> {
+export async function fetchCustomers(serviceId: string): Promise<Customer[]> {
   try {
     const response = await api.get("/getcustomer", {
       params: { serviceId },
@@ -35,13 +35,13 @@ export async function fetchCustomers(
     throw new Error(
       error.response?.data?.message ??
         error.message ??
-        "Customer loading failed"
+        "Customer loading failed",
     );
   }
 }
 
 export async function createCustomer(
-  customer: Omit<Customer, "_id"> & { month: string }
+  customer: Omit<Customer, "_id"> & { month: string },
 ) {
   const response = await api.post("/", customer);
   return response.data;
@@ -49,7 +49,7 @@ export async function createCustomer(
 
 export async function updateCustomer(
   id: string,
-  customer: Partial<Customer> & { month?: string }
+  customer: Partial<Customer> & { month?: string },
 ) {
   const response = await api.put(`/${id}`, customer);
   return response.data;

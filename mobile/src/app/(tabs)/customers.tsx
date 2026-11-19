@@ -28,6 +28,7 @@ import {
   updateCustomer,
   removeCustomer,
 } from "../../services/customerService";
+import AutoFlowFeedback from "@/components/AutoFlowFeedback";
 
 /* ───────────────────────────── Helpers ───────────────────────────── */
 
@@ -59,7 +60,12 @@ const FORM_FIELDS: {
   maxLength?: number;
   prefix?: string;
 }[] = [
-  { key: "name", label: "Customer name", placeholder: "e.g. Ravi Kumar", required: true },
+  {
+    key: "name",
+    label: "Customer name",
+    placeholder: "e.g. Ravi Kumar",
+    required: true,
+  },
   {
     key: "phone",
     label: "Phone number",
@@ -69,7 +75,11 @@ const FORM_FIELDS: {
     maxLength: 10,
   },
   { key: "doorNumber", label: "Door number", placeholder: "e.g. 12A" },
-  { key: "vehicleName", label: "Vehicle", placeholder: "e.g. Swift, TN 09 AB 1234" },
+  {
+    key: "vehicleName",
+    label: "Vehicle",
+    placeholder: "e.g. Swift, TN 09 AB 1234",
+  },
   {
     key: "monthlyAmount",
     label: "Monthly amount",
@@ -115,7 +125,9 @@ export default function CustomersScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [form, setForm] = useState(initialForm);
-  const [formErrors, setFormErrors] = useState<Partial<Record<FormKey, string>>>({});
+  const [formErrors, setFormErrors] = useState<
+    Partial<Record<FormKey, string>>
+  >({});
 
   const showToast = (message: string) => {
     setToast(message);
@@ -166,7 +178,8 @@ export default function CustomersScreen() {
             name: payment.customerName || linked.name || "Customer",
             phone: payment.customerPhone || linked.phone || "",
             doorNumber: payment.customerDoorNumber || linked.doorNumber || "",
-            vehicleName: payment.customerVehicleName || linked.vehicleName || "",
+            vehicleName:
+              payment.customerVehicleName || linked.vehicleName || "",
             monthlyAmount: Number(payment.baseAmount ?? payment.amount ?? 0),
             gender: payment.customerGender || linked.gender || "",
             isActive: linked.isActive ?? true,
@@ -185,7 +198,11 @@ export default function CustomersScreen() {
       }
     } catch (err: any) {
       console.log("CUSTOMERS ERROR:", err.response?.data || err.message);
-      setError(err.response?.data?.message || err.message || "Unable to load customers");
+      setError(
+        err.response?.data?.message ||
+          err.message ||
+          "Unable to load customers",
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -202,7 +219,11 @@ export default function CustomersScreen() {
   /* ── Counts, filtering, search ── */
   const counts = useMemo(() => {
     const active = customers.filter((c) => c.isActive !== false).length;
-    return { all: customers.length, active, inactive: customers.length - active };
+    return {
+      all: customers.length,
+      active,
+      inactive: customers.length - active,
+    };
   }, [customers]);
 
   const monthlyTotal = useMemo(
@@ -277,7 +298,8 @@ export default function CustomersScreen() {
     else if (!/^[0-9]{10}$/.test(phone))
       errors.phone = "Phone number must be exactly 10 digits.";
 
-    if (!form.monthlyAmount.trim()) errors.monthlyAmount = "Enter the monthly amount.";
+    if (!form.monthlyAmount.trim())
+      errors.monthlyAmount = "Enter the monthly amount.";
     else if (!Number.isFinite(amount) || amount <= 0)
       errors.monthlyAmount = "Amount must be greater than 0.";
 
@@ -345,58 +367,64 @@ export default function CustomersScreen() {
   /* ── Welcome message (new customers only) ── */
   const handleWelcomeMessage = async (customer: Customer) => {
     if (isHistorical) return;
-    if (customer.welcomeMessageSent !== false) return;
+    if (
+      customer.welcomeMessageEligible !== true ||
+      customer.welcomeMessageSent !== false
+    ) {
+      return;
+    }
     if (sendingWelcomeId) return;
 
     try {
       setSendingWelcomeId(customer._id);
 
-     
-const savedServiceId = await SecureStore.getItemAsync(
-  "autoflow_service_id"
-);
+      const savedServiceId = await SecureStore.getItemAsync(
+        "autoflow_service_id",
+      );
 
-if (!savedServiceId) {
-  throw new Error("Selected service not found.");
-}
+      if (!savedServiceId) {
+        throw new Error("Selected service not found.");
+      }
 
-// Check service ID
-console.log("CUSTOMER SERVICE ID:", customer.serviceId);
-console.log("STORED SERVICE ID:", savedServiceId);
+      // Check service ID
+      console.log("CUSTOMER SERVICE ID:", customer.serviceId);
+      console.log("STORED SERVICE ID:", savedServiceId);
 
-// Fetch WhatsApp template
-const response = await api.get(
-  `/whatsapp-template/${savedServiceId}`
-);
+      // Fetch WhatsApp template
+      const response = await api.get(`/whatsapp-template/${savedServiceId}`);
 
-// Check actual backend response
-console.log("TEMPLATE API RESPONSE:", response.data);
+      // Check actual backend response
+      console.log("TEMPLATE API RESPONSE:", response.data);
 
-// Support both direct response and nested data response
-const template =
-  response.data?.welcomeTemplate ||
-  response.data?.data?.welcomeTemplate ||
-  "";
+      // Support both direct response and nested data response
+      const template =
+        response.data?.welcomeTemplate ||
+        response.data?.data?.welcomeTemplate ||
+        "";
 
-console.log("FINAL WELCOME TEMPLATE:", template);
+      console.log("FINAL WELCOME TEMPLATE:", template);
 
-if (typeof template !== "string" || !template.trim()) {
-  Alert.alert(
-    "Welcome template missing",
-    "Template not found for this service. Please check Settings."
-  );
-  return;
-}
+      if (typeof template !== "string" || !template.trim()) {
+        Alert.alert(
+          "Welcome template missing",
+          "Template not found for this service. Please check Settings.",
+        );
+        return;
+      }
 
-      
-
-      const message = template.replace(/{{name}}/g, customer.name || "Customer");
+      const message = template.replace(
+        /{{name}}/g,
+        customer.name || "Customer",
+      );
 
       const phone = customer.phone.replace(/\D/g, "");
       const formattedPhone = phone.length === 10 ? `91${phone}` : phone;
 
       if (formattedPhone.length < 10) {
-        Alert.alert("Invalid phone number", "This customer’s phone number is invalid.");
+        Alert.alert(
+          "Invalid phone number",
+          "This customer’s phone number is invalid.",
+        );
         return;
       }
 
@@ -405,7 +433,9 @@ if (typeof template !== "string" || !template.trim()) {
 
       await Linking.openURL(whatsappUrl);
 
-      await api.patch(`/${customer._id}/welcome-sent`, { serviceId: savedServiceId });
+      await api.patch(`/${customer._id}/welcome-sent`, {
+        serviceId: savedServiceId,
+      });
 
       setCustomers((previous) =>
         previous.map((item) =>
@@ -451,7 +481,9 @@ if (typeof template !== "string" || !template.trim()) {
             } catch (err: any) {
               Alert.alert(
                 "Couldn’t delete customer",
-                err.response?.data?.message || err.message || "Please try again.",
+                err.response?.data?.message ||
+                  err.message ||
+                  "Please try again.",
               );
             }
           },
@@ -463,7 +495,10 @@ if (typeof template !== "string" || !template.trim()) {
   /* ── Switch back to the current month ── */
   const switchToCurrentMonth = async () => {
     try {
-      await SecureStore.setItemAsync("autoflow_selected_month", getCurrentMonth());
+      await SecureStore.setItemAsync(
+        "autoflow_selected_month",
+        getCurrentMonth(),
+      );
     } catch (err) {
       console.log("Unable to save selected month:", err);
     }
@@ -501,7 +536,10 @@ if (typeof template !== "string" || !template.trim()) {
       ? ((item as any).amount ?? item.monthlyAmount)
       : item.monthlyAmount;
     const badge = paymentBadge((item as any).status);
-    const needsWelcome = !isHistorical && item.welcomeMessageSent === false;
+    const needsWelcome =
+      !isHistorical &&
+      item.welcomeMessageEligible === true &&
+      item.welcomeMessageSent === false;
 
     return (
       <View className="mb-3 overflow-hidden rounded-3xl border border-slate-100 bg-white">
@@ -532,10 +570,18 @@ if (typeof template !== "string" || !template.trim()) {
               >
                 {item.name}
               </Text>
-              <Text className="mt-0.5 text-sm text-slate-500">{item.phone}</Text>
+              <Text className="mt-0.5 text-sm text-slate-500">
+                {item.phone}
+              </Text>
               {item.vehicleName || item.doorNumber ? (
-                <Text className="mt-0.5 text-xs text-slate-400" numberOfLines={1}>
-                  {[item.vehicleName, item.doorNumber ? `Door ${item.doorNumber}` : ""]
+                <Text
+                  className="mt-0.5 text-xs text-slate-400"
+                  numberOfLines={1}
+                >
+                  {[
+                    item.vehicleName,
+                    item.doorNumber ? `Door ${item.doorNumber}` : "",
+                  ]
                     .filter(Boolean)
                     .join("  •  ")}
                 </Text>
@@ -551,7 +597,9 @@ if (typeof template !== "string" || !template.trim()) {
               </Text>
 
               {isHistorical ? (
-                <View className={`mt-1.5 rounded-full px-2.5 py-0.5 ${badge.bg}`}>
+                <View
+                  className={`mt-1.5 rounded-full px-2.5 py-0.5 ${badge.bg}`}
+                >
                   <Text className={`text-[11px] font-semibold ${badge.text}`}>
                     {badge.label}
                   </Text>
@@ -599,7 +647,9 @@ if (typeof template !== "string" || !template.trim()) {
               onPress={() => openCustomer(item)}
               className="flex-1 items-center py-3"
             >
-              <Text className="text-xs font-semibold text-slate-600">Overview</Text>
+              <Text className="text-xs font-semibold text-slate-600">
+                Overview
+              </Text>
             </Pressable>
             <View className="w-px bg-slate-100" />
             <Pressable
@@ -625,10 +675,11 @@ if (typeof template !== "string" || !template.trim()) {
 
   if (loading) {
     return (
-      <View className="flex-1 items-center justify-center bg-slate-50">
-        <ActivityIndicator size="large" color="#2563EB" />
-        <Text className="mt-3 text-sm text-slate-500">Loading customers…</Text>
-      </View>
+      <AutoFlowFeedback
+        mode="loading"
+        title="Loading payments"
+        message="Fetching your customer payments. Please wait..."
+      />
     );
   }
 
@@ -847,7 +898,9 @@ if (typeof template !== "string" || !template.trim()) {
                 }}
                 className="mt-5 rounded-xl bg-slate-200 px-6 py-3"
               >
-                <Text className="font-semibold text-slate-700">Clear filters</Text>
+                <Text className="font-semibold text-slate-700">
+                  Clear filters
+                </Text>
               </Pressable>
             )}
           </View>
@@ -913,7 +966,10 @@ if (typeof template !== "string" || !template.trim()) {
                       {field.required ? (
                         <Text className="text-red-500"> *</Text>
                       ) : (
-                        <Text className="font-normal text-slate-400"> (optional)</Text>
+                        <Text className="font-normal text-slate-400">
+                          {" "}
+                          (optional)
+                        </Text>
                       )}
                     </Text>
 
