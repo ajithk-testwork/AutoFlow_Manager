@@ -24,6 +24,10 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  const [focusedField, setFocusedField] = useState<"email" | "password" | null>(
+    null,
+  );
+
   async function handleLogin() {
     if (!email.trim() || !password) {
       Alert.alert("Missing details", "Email and password enter pannunga.");
@@ -83,7 +87,7 @@ export default function LoginScreen() {
         </ImageBackground>
 
         {/* Login form */}
-        <View className="-mt-5 flex-1 rounded-t-[28px] bg-slate-50 px-6 pt-8 pb-10">
+        <View className="-mt-5 flex-1 rounded-t-[28px] bg-slate-50 px-6 pb-10 pt-8">
           <View className="mb-7">
             <Text className="text-2xl font-bold text-slate-900">
               Welcome back!
@@ -99,8 +103,19 @@ export default function LoginScreen() {
               Email address
             </Text>
 
-            <View className="mb-5 h-14 flex-row items-center rounded-xl border border-slate-200 bg-slate-50 px-4">
-              <Feather name="mail" size={19} color="#94A3B8" />
+            <View
+              className={`mb-5 h-14 flex-row items-center rounded-xl border px-4 ${
+                focusedField === "email"
+                  ? "border-blue-500 bg-white"
+                  : "border-slate-300 bg-white"
+              }`}
+            >
+              <Feather
+                name="mail"
+                size={19}
+                color={focusedField === "email" ? "#2563EB" : "#64748B"}
+              />
+
               <TextInput
                 value={email}
                 onChangeText={setEmail}
@@ -110,7 +125,19 @@ export default function LoginScreen() {
                 autoCapitalize="none"
                 autoCorrect={false}
                 editable={!loading}
-                className="ml-3 flex-1 text-base text-slate-900"
+                selectionColor="#2563EB"
+                cursorColor="#2563EB"
+                onFocus={() => setFocusedField("email")}
+                onBlur={() => setFocusedField(null)}
+                style={{
+                  flex: 1,
+                  marginLeft: 12,
+                  fontSize: 16,
+                  color: "#0F172A",
+                  fontWeight: "500",
+                  paddingVertical: 0,
+                  includeFontPadding: false,
+                }}
               />
             </View>
 
@@ -119,8 +146,18 @@ export default function LoginScreen() {
               Password
             </Text>
 
-            <View className="mb-6 h-14 flex-row items-center rounded-xl border border-slate-200 bg-slate-50 px-4">
-              <Feather name="lock" size={19} color="#94A3B8" />
+            <View
+              className={`mb-6 h-14 flex-row items-center rounded-xl border px-4 ${
+                focusedField === "password"
+                  ? "border-blue-500 bg-white"
+                  : "border-slate-300 bg-white"
+              }`}
+            >
+              <Feather
+                name="lock"
+                size={19}
+                color={focusedField === "password" ? "#2563EB" : "#64748B"}
+              />
 
               <TextInput
                 value={password}
@@ -129,7 +166,19 @@ export default function LoginScreen() {
                 placeholderTextColor="#94A3B8"
                 secureTextEntry={!showPassword}
                 editable={!loading}
-                className="ml-3 flex-1 text-base text-slate-900"
+                selectionColor="#2563EB"
+                cursorColor="#2563EB"
+                onFocus={() => setFocusedField("password")}
+                onBlur={() => setFocusedField(null)}
+                style={{
+                  flex: 1,
+                  marginLeft: 12,
+                  fontSize: 16,
+                  color: "#0F172A",
+                  fontWeight: "500",
+                  paddingVertical: 0,
+                  includeFontPadding: false,
+                }}
               />
 
               <Pressable
@@ -166,6 +215,7 @@ export default function LoginScreen() {
 
             <View className="mt-6 flex-row justify-center">
               <Text className="text-sm text-slate-500">New to AutoFlow? </Text>
+
               <Link
                 href="/register"
                 className="text-sm font-bold text-blue-600"

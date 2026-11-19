@@ -288,11 +288,13 @@ export const togglePayment = async (req, res) => {
   }
 };
 
+
 export const getPaymentsByMonth = async (req, res) => {
   try {
     const { month, serviceId } = req.query;
     const tenantId = req.user.tenantId;
 
+    // Validate required fields
     if (!month || !serviceId) {
       return res.status(400).json({
         success: false,
@@ -300,6 +302,7 @@ export const getPaymentsByMonth = async (req, res) => {
       });
     }
 
+    // Verify service belongs to logged-in tenant
     const service = await Service.findOne({
       _id: serviceId,
       tenantId,
@@ -313,27 +316,42 @@ export const getPaymentsByMonth = async (req, res) => {
       });
     }
 
+    // Get only existing customers
+    // Deleted customers will not be included
+    const customerIds = await Customer.distinct("_id", {
+      tenantId,
+      serviceId,
+    });
+
+    // Fetch payments only for existing customers
     const payments = await Payment.find({
       tenantId,
       serviceId,
       month: month.trim(),
+      customerId: {
+        $in: customerIds,
+      },
     })
       .populate(
         "customerId",
-        "name phone doorNumber vehicleName monthlyAmount gender isActive serviceId",
+        "name phone doorNumber vehicleName monthlyAmount gender isActive serviceId"
       )
-      .sort({ createdAt: 1 });
+      .sort({
+        createdAt: 1,
+      });
 
-    res.status(200).json(payments);
+    return res.status(200).json(payments);
+
   } catch (error) {
     console.error("Get Payments Error:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Error fetching payments",
     });
   }
 };
+
 
 export const getSinglePayment = async (req, res) => {
   try {
@@ -582,6 +600,7 @@ export const updateCustomer = async (req, res) => {
   }
 };
 
+
 export const getGlobalHistory = async (req, res) => {
   try {
     const { serviceId } = req.query;
@@ -593,6 +612,7 @@ export const getGlobalHistory = async (req, res) => {
       });
     }
 
+    // Verify service ownership
     const service = await Service.findOne({
       _id: serviceId,
       tenantId,
@@ -605,43 +625,64 @@ export const getGlobalHistory = async (req, res) => {
       });
     }
 
+    // Get only customers that actually exist
+    // Includes inactive customers because their history
+    // should remain available.
+    const customerIds = await Customer.distinct("_id", {
+      tenantId,
+      serviceId,
+    });
+
+    // Ignore orphan payments belonging to deleted customers
     const payments = await Payment.find({
       tenantId,
       serviceId,
+      customerId: { $in: customerIds },
     })
-      .populate("customerId")
+      .populate(
+        "customerId",
+        "name phone doorNumber vehicleName monthlyAmount gender isActive"
+      )
       .sort({ createdAt: -1 });
 
     const groupedHistory = {};
 
     payments.forEach((payment) => {
-      if (!groupedHistory[payment.month]) {
-        groupedHistory[payment.month] = {
-          month: payment.month,
+      const month = payment.month;
+
+      if (!groupedHistory[month]) {
+        groupedHistory[month] = {
+          month,
           collected: 0,
           pending: 0,
           payments: [],
         };
       }
 
-      groupedHistory[payment.month].payments.push(payment);
+      groupedHistory[month].payments.push(payment);
 
       if (payment.status === "Paid") {
-        groupedHistory[payment.month].collected += Number(payment.amount) || 0;
+        groupedHistory[month].collected +=
+          Number(payment.amount) || 0;
       } else {
-        groupedHistory[payment.month].pending += Number(payment.amount) || 0;
+        groupedHistory[month].pending +=
+          Number(payment.amount) || 0;
       }
     });
 
-    return res.json(Object.values(groupedHistory));
+    return res.status(200).json(
+      Object.values(groupedHistory)
+    );
+
   } catch (error) {
     console.error("Global History Error:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       message: "Failed to fetch global history",
     });
   }
 };
+
 
 export const markWelcomeSent = async (req, res) => {
   try {

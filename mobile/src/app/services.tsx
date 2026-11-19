@@ -13,6 +13,7 @@ import * as SecureStore from "expo-secure-store";
 import { Feather } from "@expo/vector-icons";
 import Svg, { Circle, Line, Path } from "react-native-svg";
 import { api } from "../api/client";
+import AutoFlowFeedback from "@/components/AutoFlowFeedback";
 
 /* ───────────────────────────── Types ───────────────────────────── */
 
@@ -290,16 +291,15 @@ export default function ServicesScreen() {
 
   /* ───────────────────────── Loading ───────────────────────── */
 
-  if (loading) {
-    return (
-      <View className="flex-1 items-center justify-center bg-slate-50">
-        <ActivityIndicator size="large" color="#2563EB" />
-        <Text className="mt-4 text-sm font-medium text-slate-500">
-          Loading your services…
-        </Text>
-      </View>
-    );
-  }
+if (loading) {
+  return (
+    <AutoFlowFeedback
+      mode="loading"
+      title="Loading dashboard"
+      message="Preparing your dashboard. Please wait..."
+    />
+  );
+}
 
   /* ───────────────────────────── Render ───────────────────────────── */
 

@@ -16,6 +16,7 @@ import { router } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 
 import { api } from "../../api/client";
+import AutoFlowFeedback from "@/components/AutoFlowFeedback";
 
 /* ───────────────────────────── Types ───────────────────────────── */
 
@@ -500,12 +501,13 @@ export default function DashboardScreen() {
 
   /* ───────────────────────── Loading / error ───────────────────────── */
 
-  if (loading && !dashboardData.length) {
+  if (loading) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-slate-50">
-        <ActivityIndicator size="large" color="#2563EB" />
-        <Text className="mt-3 text-sm text-slate-500">Loading dashboard…</Text>
-      </SafeAreaView>
+      <AutoFlowFeedback
+        mode="loading"
+        title="Loading dashboard"
+        message="Preparing your dashboard. Please wait..."
+      />
     );
   }
 
