@@ -351,19 +351,44 @@ export default function CustomersScreen() {
     try {
       setSendingWelcomeId(customer._id);
 
-      const savedServiceId = await SecureStore.getItemAsync("autoflow_service_id");
-      if (!savedServiceId) throw new Error("Selected service not found.");
+     
+const savedServiceId = await SecureStore.getItemAsync(
+  "autoflow_service_id"
+);
 
-      const response = await api.get(`/whatsapp-template/${savedServiceId}`);
-      const template = response.data?.welcomeTemplate;
+if (!savedServiceId) {
+  throw new Error("Selected service not found.");
+}
 
-      if (!template?.trim()) {
-        Alert.alert(
-          "Welcome template missing",
-          "Create a welcome message template in Settings first.",
-        );
-        return;
-      }
+// Check service ID
+console.log("CUSTOMER SERVICE ID:", customer.serviceId);
+console.log("STORED SERVICE ID:", savedServiceId);
+
+// Fetch WhatsApp template
+const response = await api.get(
+  `/whatsapp-template/${savedServiceId}`
+);
+
+// Check actual backend response
+console.log("TEMPLATE API RESPONSE:", response.data);
+
+// Support both direct response and nested data response
+const template =
+  response.data?.welcomeTemplate ||
+  response.data?.data?.welcomeTemplate ||
+  "";
+
+console.log("FINAL WELCOME TEMPLATE:", template);
+
+if (typeof template !== "string" || !template.trim()) {
+  Alert.alert(
+    "Welcome template missing",
+    "Template not found for this service. Please check Settings."
+  );
+  return;
+}
+
+      
 
       const message = template.replace(/{{name}}/g, customer.name || "Customer");
 

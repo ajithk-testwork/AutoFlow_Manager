@@ -583,31 +583,44 @@ export default function SettingsScreen() {
 
       const response = await api.get(`/whatsapp-template/${storedServiceId}`);
 
-      const loaded: TemplateData = response.data
-        ? {
-            welcomeTemplate:
-              response.data.welcomeTemplate || defaultTemplates.welcomeTemplate,
+      console.log("SETTINGS TEMPLATE API RESPONSE:", response.data);
 
-            requestTemplate:
-              response.data.requestTemplate || defaultTemplates.requestTemplate,
+      // Support both old and new backend response formats
+      const dbTemplate = response.data?.data ?? response.data ?? {};
 
-            reminderTemplate:
-              response.data.reminderTemplate ||
-              defaultTemplates.reminderTemplate,
+      const hasSavedWelcomeTemplate =
+        typeof dbTemplate.welcomeTemplate === "string" &&
+        dbTemplate.welcomeTemplate.trim().length > 0;
 
-            thankyouTemplate:
-              response.data.thankyouTemplate ||
-              defaultTemplates.thankyouTemplate,
+      const loaded: TemplateData = {
+        welcomeTemplate: hasSavedWelcomeTemplate
+          ? dbTemplate.welcomeTemplate
+          : defaultTemplates.welcomeTemplate,
 
-            upiId: response.data.upiId || "",
+        requestTemplate:
+          dbTemplate.requestTemplate || defaultTemplates.requestTemplate,
 
-            phone: response.data.phone || "",
-          }
-        : defaultTemplates;
+        reminderTemplate:
+          dbTemplate.reminderTemplate || defaultTemplates.reminderTemplate,
+
+        thankyouTemplate:
+          dbTemplate.thankyouTemplate || defaultTemplates.thankyouTemplate,
+
+        upiId: dbTemplate.upiId || "",
+
+        phone: dbTemplate.phone || "",
+      };
 
       setTemplate(loaded);
 
-      setSaved(loaded);
+      // If welcome template is missing in DB,
+      // make Save Changes enabled so defaults can be persisted.
+      setSaved({
+        ...loaded,
+        welcomeTemplate: hasSavedWelcomeTemplate ? loaded.welcomeTemplate : "",
+      });
+
+      console.log("WELCOME TEMPLATE EXISTS IN DB:", hasSavedWelcomeTemplate);
 
       setErrors({});
     } catch (error: any) {
@@ -725,35 +738,73 @@ export default function SettingsScreen() {
   };
 
   const saveSettings = async () => {
-    if (!serviceId) return;
+    if (!serviceId) {
+      Alert.alert("Error", "Service not selected");
+      return;
+    }
 
     if (!validate()) return;
 
     const payload: TemplateData = {
       ...template,
-
+      welcomeTemplate: template.welcomeTemplate.trim(),
+      requestTemplate: template.requestTemplate.trim(),
+      reminderTemplate: template.reminderTemplate.trim(),
+      thankyouTemplate: template.thankyouTemplate.trim(),
       upiId: template.upiId.trim(),
-
       phone: template.phone.trim(),
     };
+
+    if (!payload.welcomeTemplate) {
+      Alert.alert("Error", "Welcome message cannot be empty");
+      return;
+    }
 
     try {
       setSaving(true);
 
-      await api.post("/whatsapp-template/save", { serviceId, ...payload });
+      console.log("SAVING SERVICE ID:", serviceId);
+      console.log("SAVING WELCOME TEMPLATE:", payload.welcomeTemplate);
 
-      setTemplate(payload);
+      const response = await api.post("/whatsapp-template/save", {
+        serviceId,
+        ...payload,
+      });
 
-      setSaved(payload);
+      console.log("SAVE TEMPLATE RESPONSE:", response.data);
 
-      showToast("Settings saved");
+      const savedData = response.data?.data ?? response.data;
+
+      if (!response.data?.success || !savedData?.welcomeTemplate?.trim()) {
+        throw new Error("Welcome template was not saved in database");
+      }
+
+      const confirmedTemplate: TemplateData = {
+        welcomeTemplate: savedData.welcomeTemplate,
+        requestTemplate: savedData.requestTemplate || payload.requestTemplate,
+        reminderTemplate:
+          savedData.reminderTemplate || payload.reminderTemplate,
+        thankyouTemplate:
+          savedData.thankyouTemplate || payload.thankyouTemplate,
+        upiId: savedData.upiId || payload.upiId,
+        phone: savedData.phone || payload.phone,
+      };
+
+      setTemplate(confirmedTemplate);
+      setSaved(confirmedTemplate);
+
+      showToast("WhatsApp templates saved successfully");
     } catch (error: any) {
-      console.log("Save settings error:", error.response?.data || error);
+      console.log(
+        "SAVE TEMPLATE ERROR:",
+        error.response?.data || error.message,
+      );
 
       Alert.alert(
-        "Couldn’t save settings",
-
-        error.response?.data?.message || "Please try again.",
+        "Save failed",
+        error.response?.data?.message ||
+          error.message ||
+          "Unable to save WhatsApp templates",
       );
     } finally {
       setSaving(false);
