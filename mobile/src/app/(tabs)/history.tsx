@@ -113,8 +113,9 @@ export default function HistoryScreen() {
     try {
       setError("");
 
-      const savedServiceId =
-        await SecureStore.getItemAsync("autoflow_service_id");
+      const savedServiceId = await SecureStore.getItemAsync(
+        "autoflow_service_id",
+      );
 
       if (!savedServiceId) {
         throw new Error("Please select a service first.");
@@ -147,19 +148,27 @@ export default function HistoryScreen() {
 
         const visiblePayments = sourcePayments.filter((payment) => {
           const paymentStatus = String(payment.status || "").toLowerCase();
-          if (paymentStatus === "cancelled") return false;
 
           const linkedCustomer =
             payment.customerId && typeof payment.customerId === "object"
               ? payment.customerId
               : null;
+
           const hasLinkedCustomer = Boolean(linkedCustomer?._id);
 
-          // An orphan Pending record is not a collectible customer payment.
-          // Preserve orphan Paid records as historical collection records.
-          if (paymentStatus === "pending" && !hasLinkedCustomer) return false;
+          // Never show cancelled payments.
+          if (paymentStatus === "cancelled") return false;
 
-          return paymentStatus === "paid" || paymentStatus === "pending";
+          // Preserve every previously collected payment,
+          // even when the customer has been deactivated or deleted.
+          if (paymentStatus === "paid") return true;
+
+          // Pending payments should only belong to active customers.
+          if (paymentStatus === "pending") {
+            return hasLinkedCustomer && linkedCustomer.isActive !== false;
+          }
+
+          return false;
         });
 
         const collected = visiblePayments.reduce(
@@ -348,29 +357,29 @@ export default function HistoryScreen() {
   /* ───────────────────────── Loading / error ───────────────────────── */
 
   if (loading) {
-  return (
-    <AutoFlowFeedback
-      mode="loading"
-      title="Loading payments"
-      message="Fetching your customer payments. Please wait..."
-    />
-  );
-}
+    return (
+      <AutoFlowFeedback
+        mode="loading"
+        title="Loading payments"
+        message="Fetching your customer payments. Please wait..."
+      />
+    );
+  }
 
- if (error && history.length === 0) {
-  return (
-    <AutoFlowFeedback
-      mode="error"
-      title="Unable to load payments"
-      message={error}
-      retryLabel="Try again"
-      onRetry={() => {
-        setLoading(true);
-        loadHistory().finally(() => setLoading(false));
-      }}
-    />
-  );
-}
+  if (error && history.length === 0) {
+    return (
+      <AutoFlowFeedback
+        mode="error"
+        title="Unable to load payments"
+        message={error}
+        retryLabel="Try again"
+        onRetry={() => {
+          setLoading(true);
+          loadHistory().finally(() => setLoading(false));
+        }}
+      />
+    );
+  }
 
   const filterOptions: { key: StatusFilter; label: string }[] = [
     { key: "ALL", label: "All" },
@@ -416,8 +425,8 @@ export default function HistoryScreen() {
               {currency(totals.collected)}
             </Text>
             <Text className="mt-1 text-xs text-slate-400">
-              across {totals.months} {totals.months === 1 ? "month" : "months"}
-              {" "}and {totals.payments} payments
+              across {totals.months} {totals.months === 1 ? "month" : "months"}{" "}
+              and {totals.payments} payments
             </Text>
 
             <View className="mt-4 h-2.5 overflow-hidden rounded-full bg-slate-700">
@@ -536,7 +545,8 @@ export default function HistoryScreen() {
           ) : (
             filteredHistory.map((monthItem) => {
               const isExpanded =
-                expandedMonth === monthItem.month || monthItem.matchedByCustomer;
+                expandedMonth === monthItem.month ||
+                monthItem.matchedByCustomer;
               const isCurrent = monthItem.month === currentMonth;
 
               const rate = rateOf(monthItem.collected, monthItem.pending);
@@ -556,11 +566,15 @@ export default function HistoryScreen() {
                 const an =
                   (a.customerId && typeof a.customerId === "object"
                     ? a.customerId.name
-                    : "") || a.customerName || "";
+                    : "") ||
+                  a.customerName ||
+                  "";
                 const bn =
                   (b.customerId && typeof b.customerId === "object"
                     ? b.customerId.name
-                    : "") || b.customerName || "";
+                    : "") ||
+                  b.customerName ||
+                  "";
                 return an.localeCompare(bn);
               });
 
@@ -599,7 +613,8 @@ export default function HistoryScreen() {
                           )}
                         </View>
                         <Text className="mt-1 text-xs text-slate-500">
-                          {monthItem.payments.length} payments · {paidCount} paid
+                          {monthItem.payments.length} payments · {paidCount}{" "}
+                          paid
                           {unpaidCount > 0 ? ` · ${unpaidCount} unpaid` : ""}
                         </Text>
                       </View>
@@ -611,7 +626,9 @@ export default function HistoryScreen() {
 
                     <View className="mt-4 flex-row items-end justify-between">
                       <View>
-                        <Text className="text-xs text-slate-500">Collected</Text>
+                        <Text className="text-xs text-slate-500">
+                          Collected
+                        </Text>
                         <Text className="mt-0.5 text-xl font-extrabold text-green-700">
                           {currency(monthItem.collected)}
                         </Text>
