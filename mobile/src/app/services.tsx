@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  ImageBackground,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -478,9 +479,48 @@ if (loading) {
           </Pressable>
         </View>
 
-        {/* Illustration */}
-        <View className="mt-6 overflow-hidden rounded-3xl border border-slate-100 bg-white px-3 pt-3">
-          <CarWashIllustration />
+        {/* Billing & payment hero banner */}
+        <View className="mt-6 overflow-hidden rounded-[28px]">
+          <ImageBackground
+            source={{
+              uri: "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=85",
+            }}
+            resizeMode="cover"
+            imageStyle={{ borderRadius: 28 }}
+            style={{ minHeight: 190, justifyContent: "flex-end" }}
+          >
+            <View
+              style={{
+                minHeight: 190,
+                justifyContent: "flex-end",
+                padding: 20,
+                backgroundColor: "rgba(10, 24, 48, 0.68)",
+              }}
+            >
+              <View className="mb-3 self-start flex-row items-center rounded-full border border-white/30 bg-white/15 px-3 py-1.5">
+                <Feather name="shield-check" size={13} color="#FFFFFF" />
+                <Text className="ml-2 text-[10px] font-bold uppercase tracking-wider text-white">
+                  AutoFlow billing
+                </Text>
+              </View>
+              <Text className="max-w-[290px] text-2xl font-extrabold leading-8 text-white">
+                Simple services. Smarter payments.
+              </Text>
+              <Text className="mt-2 max-w-[300px] text-xs leading-5 text-white/85">
+                Organise monthly plans, track collections and manage every customer in one place.
+              </Text>
+              <View className="mt-4 flex-row flex-wrap gap-2">
+                <View className="flex-row items-center rounded-full bg-white/15 px-3 py-2">
+                  <Feather name="calendar" size={12} color="#FFFFFF" />
+                  <Text className="ml-2 text-[10px] font-semibold text-white">Monthly billing</Text>
+                </View>
+                <View className="flex-row items-center rounded-full bg-white/15 px-3 py-2">
+                  <Feather name="credit-card" size={12} color="#FFFFFF" />
+                  <Text className="ml-2 text-[10px] font-semibold text-white">Payment tracking</Text>
+                </View>
+              </View>
+            </View>
+          </ImageBackground>
         </View>
 
         {/* Heading */}
