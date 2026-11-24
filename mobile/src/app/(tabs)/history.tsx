@@ -33,7 +33,13 @@ type HistoryPayment = {
   customerId: HistoryCustomer | string | null;
   month: string;
   amount: number;
-  status: "Paid" | "Pending" | string;
+  status: "Paid" | "Pending" | "Cancelled" | string;
+  // Payment snapshots are retained even if the Customer document is deleted.
+  customerName?: string;
+  customerPhone?: string;
+  customerDoorNumber?: string;
+  customerVehicleName?: string;
+  customerGender?: string;
   paidDate?: string;
   missedDays?: number;
   dailyStatus?: {
@@ -120,14 +126,71 @@ export default function HistoryScreen() {
         params: { serviceId: savedServiceId },
       });
 
-      const result: MonthlyHistory[] = Array.isArray(response.data)
-        ? response.data
-        : [];
+      // Backend supports the current { success, history } response and the
+      // older direct-array response.
+      const responseData = response.data;
+      const rawHistory: MonthlyHistory[] = Array.isArray(responseData)
+        ? responseData
+        : Array.isArray(responseData?.history)
+          ? responseData.history
+          : Array.isArray(responseData?.data)
+            ? responseData.data
+            : [];
+
+      // Exclude cancelled payments and orphan Pending payments from active
+      // billing totals/list, just as the Payments screen does. Keep orphan
+      // Paid records so previously collected history is not lost.
+      const normalizedHistory = rawHistory.map((monthItem) => {
+        const sourcePayments = Array.isArray(monthItem.payments)
+          ? monthItem.payments
+          : [];
+
+        const visiblePayments = sourcePayments.filter((payment) => {
+          const paymentStatus = String(payment.status || "").toLowerCase();
+          if (paymentStatus === "cancelled") return false;
+
+          const linkedCustomer =
+            payment.customerId && typeof payment.customerId === "object"
+              ? payment.customerId
+              : null;
+          const hasLinkedCustomer = Boolean(linkedCustomer?._id);
+
+          // An orphan Pending record is not a collectible customer payment.
+          // Preserve orphan Paid records as historical collection records.
+          if (paymentStatus === "pending" && !hasLinkedCustomer) return false;
+
+          return paymentStatus === "paid" || paymentStatus === "pending";
+        });
+
+        const collected = visiblePayments.reduce(
+          (sum, payment) =>
+            String(payment.status).toLowerCase() === "paid"
+              ? sum + (Number(payment.amount) || 0)
+              : sum,
+          0,
+        );
+        const pending = visiblePayments.reduce(
+          (sum, payment) =>
+            String(payment.status).toLowerCase() === "pending"
+              ? sum + (Number(payment.amount) || 0)
+              : sum,
+          0,
+        );
+
+        return {
+          ...monthItem,
+          payments: visiblePayments,
+          collected,
+          pending,
+        };
+      });
 
       // Newest month first
-      result.sort((a, b) => getMonthDate(b.month) - getMonthDate(a.month));
+      normalizedHistory.sort(
+        (a, b) => getMonthDate(b.month) - getMonthDate(a.month),
+      );
 
-      setHistory(result);
+      setHistory(normalizedHistory);
     } catch (err: any) {
       console.log("History loading error:", err.response?.data || err.message);
 
@@ -201,7 +264,7 @@ export default function HistoryScreen() {
           ? true
           : statusFilter === "PAID"
             ? p.status === "Paid"
-            : p.status !== "Paid",
+            : p.status === "Pending",
       );
 
     return history
@@ -218,14 +281,23 @@ export default function HistoryScreen() {
 
         const matching = byStatus(
           (monthItem.payments || []).filter((payment) => {
-            const customer = payment.customerId;
-            if (!customer || typeof customer !== "object") return false;
+            const customer =
+              payment.customerId && typeof payment.customerId === "object"
+                ? payment.customerId
+                : null;
+
+            const name = customer?.name || payment.customerName || "";
+            const phone = customer?.phone || payment.customerPhone || "";
+            const vehicle =
+              customer?.vehicleName || payment.customerVehicleName || "";
+            const door =
+              customer?.doorNumber || payment.customerDoorNumber || "";
 
             return (
-              customer.name?.toLowerCase().includes(term) ||
-              customer.phone?.toLowerCase().includes(term) ||
-              customer.vehicleName?.toLowerCase().includes(term) ||
-              customer.doorNumber?.toLowerCase().includes(term)
+              name.toLowerCase().includes(term) ||
+              phone.toLowerCase().includes(term) ||
+              vehicle.toLowerCase().includes(term) ||
+              door.toLowerCase().includes(term)
             );
           }),
         );
@@ -482,13 +554,13 @@ export default function HistoryScreen() {
                 const bu = b.status === "Paid" ? 1 : 0;
                 if (au !== bu) return au - bu;
                 const an =
-                  a.customerId && typeof a.customerId === "object"
-                    ? a.customerId.name || ""
-                    : "";
+                  (a.customerId && typeof a.customerId === "object"
+                    ? a.customerId.name
+                    : "") || a.customerName || "";
                 const bn =
-                  b.customerId && typeof b.customerId === "object"
-                    ? b.customerId.name || ""
-                    : "";
+                  (b.customerId && typeof b.customerId === "object"
+                    ? b.customerId.name
+                    : "") || b.customerName || "";
                 return an.localeCompare(bn);
               });
 
@@ -596,12 +668,15 @@ export default function HistoryScreen() {
 
                           const customerName = hasCustomer
                             ? (customer as HistoryCustomer).name ||
+                              payment.customerName ||
                               "Unknown customer"
-                            : "Customer details unavailable";
+                            : payment.customerName || "Deleted customer";
 
                           const customerPhone = hasCustomer
-                            ? (customer as HistoryCustomer).phone || ""
-                            : "";
+                            ? (customer as HistoryCustomer).phone ||
+                              payment.customerPhone ||
+                              ""
+                            : payment.customerPhone || "";
 
                           const paid = payment.status === "Paid";
 

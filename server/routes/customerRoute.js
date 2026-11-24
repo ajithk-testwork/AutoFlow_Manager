@@ -27,6 +27,7 @@ import {
   getServices,
   createService,
   deleteService,
+  updateService,
 } from "../controllers/serviceController.js";
 
 import { protect } from "../middleware/authMiddleware.js";
@@ -50,7 +51,6 @@ cusRouter.get("/clients", getAllClients);
 
 // GLOBAL HISTORY
 cusRouter.get("/global/history", protect, getGlobalHistory);
-
 cusRouter.get("/getcustomer", protect, getCustomers);
 cusRouter.post("/", protect, addCustomer);
 cusRouter.put("/:id", protect, updateCustomer);
@@ -72,6 +72,7 @@ cusRouter.post("/daily-status", protect, updateDailyStatus);
 cusRouter.get("/services", protect, getServices);
 cusRouter.post("/services", protect, createService);
 cusRouter.delete("/services/:id", protect, deleteService);
+cusRouter.put("/services/:id", protect, updateService)
 
 // Whatsapp Template
 cusRouter.post("/whatsapp-template/save", protect, saveTemplate);

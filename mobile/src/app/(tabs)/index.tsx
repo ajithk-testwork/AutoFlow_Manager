@@ -35,8 +35,8 @@ type Customer = {
 
 type Payment = {
   _id: string;
-  customerId: Customer | string;
-  status: string;
+  customerId: Customer | string | null;
+  status: "Paid" | "Pending" | "Cancelled" | string;
   amount: number;
   paidDate?: string;
   dailyStatus?: { date: string; status: string }[];
@@ -270,9 +270,18 @@ export default function DashboardScreen() {
       params: { serviceId },
     });
 
-    const months = Array.isArray(response.data)
-      ? response.data.map((item: any) => item.month)
-      : [];
+    const responseData = response.data;
+    const historyItems = Array.isArray(responseData)
+      ? responseData
+      : Array.isArray(responseData?.history)
+        ? responseData.history
+        : Array.isArray(responseData?.data)
+          ? responseData.data
+          : [];
+
+    const months = historyItems
+      .map((item: any) => item?.month)
+      .filter((month: unknown): month is string => typeof month === "string");
 
     setInitializedMonths(months);
     return months;
@@ -294,21 +303,52 @@ export default function DashboardScreen() {
         ? customersResponse.data
         : [];
 
-      const payments: Payment[] = Array.isArray(paymentsResponse.data)
-        ? paymentsResponse.data
-        : [];
+      // Backend now returns { success, payments }; keep compatibility with
+      // the previous direct-array response.
+      const paymentResponseData = paymentsResponse.data;
+      const receivedPayments: Payment[] = Array.isArray(paymentResponseData)
+        ? paymentResponseData
+        : Array.isArray(paymentResponseData?.payments)
+          ? paymentResponseData.payments
+          : Array.isArray(paymentResponseData?.data)
+            ? paymentResponseData.data
+            : [];
 
       setAllCustomers(customers);
+
+      // Only active billing records belonging to customers that still exist
+      // should affect the Home dashboard. Cancelled and orphan payments are
+      // excluded, while valid Paid/Pending records remain unchanged.
+      const existingCustomerIds = new Set(
+        customers.map((customer) => String(customer._id)),
+      );
+
+      const payments = receivedPayments.filter((payment) => {
+        if (payment.status !== "Paid" && payment.status !== "Pending") {
+          return false;
+        }
+
+        const customerId =
+          payment.customerId && typeof payment.customerId === "object"
+            ? payment.customerId._id
+            : payment.customerId;
+
+        return Boolean(
+          customerId && existingCustomerIds.has(String(customerId)),
+        );
+      });
 
       const paymentMap = new Map<string, Payment>();
 
       payments.forEach((payment) => {
         const customerId =
-          typeof payment.customerId === "object"
-            ? payment.customerId?._id
+          payment.customerId && typeof payment.customerId === "object"
+            ? payment.customerId._id
             : payment.customerId;
 
-        if (customerId) paymentMap.set(customerId, payment);
+        if (customerId) {
+          paymentMap.set(String(customerId), payment);
+        }
       });
 
       const isMonthStarted = payments.length > 0;

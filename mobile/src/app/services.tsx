@@ -2,7 +2,11 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   Pressable,
+  TextInput,
   RefreshControl,
   ScrollView,
   Text,
@@ -21,6 +25,7 @@ type Service = {
   id: string;
   name: string;
   description: string;
+  monthlyPrice: number;
   isActive: boolean;
 };
 
@@ -71,6 +76,7 @@ function normalizeServices(response: any): Service[] {
         item.description ??
         item.details ??
         "Manage your customers and monthly billing.",
+      monthlyPrice: Number(item.monthlyPrice ?? item.price ?? 0) || 0,
       isActive: item.isActive !== false && item.active !== false,
     }))
     .filter((service: Service) => service.id && service.isActive);
@@ -172,6 +178,15 @@ export default function ServicesScreen() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  const [serviceModalVisible, setServiceModalVisible] = useState(false);
+  const [editingService, setEditingService] = useState<Service | null>(null);
+  const [serviceNameInput, setServiceNameInput] = useState("");
+  const [monthlyPriceInput, setMonthlyPriceInput] = useState("0");
+  const [descriptionInput, setDescriptionInput] = useState("");
+  const [serviceFormError, setServiceFormError] = useState("");
+  const [serviceSaving, setServiceSaving] = useState(false);
+  const [deletingServiceId, setDeletingServiceId] = useState<string | null>(null);
+
   const fetchServices = useCallback(async () => {
     try {
       setError("");
@@ -242,6 +257,123 @@ export default function ServicesScreen() {
     setRefreshing(true);
     await fetchServices();
     setRefreshing(false);
+  };
+
+  const openCreateService = () => {
+    setEditingService(null);
+    setServiceNameInput("");
+    setMonthlyPriceInput("0");
+    setDescriptionInput("");
+    setServiceFormError("");
+    setServiceModalVisible(true);
+  };
+
+  const openEditService = (service: Service) => {
+    setEditingService(service);
+    setServiceNameInput(service.name);
+    setMonthlyPriceInput(String(service.monthlyPrice ?? 0));
+    setDescriptionInput(service.description || "");
+    setServiceFormError("");
+    setServiceModalVisible(true);
+  };
+
+  const handleSaveService = async () => {
+    const cleanName = serviceNameInput.trim();
+    const cleanDescription = descriptionInput.trim();
+    const priceText = monthlyPriceInput.trim();
+    const price = Number(priceText);
+
+    if (!cleanName) {
+      setServiceFormError("Service name is required.");
+      return;
+    }
+
+    if (!priceText || !Number.isFinite(price) || price < 0) {
+      setServiceFormError("Enter a valid monthly price (0 or above).");
+      return;
+    }
+
+    try {
+      setServiceSaving(true);
+      setServiceFormError("");
+
+      const payload = {
+        serviceName: cleanName,
+        monthlyPrice: price,
+        description: cleanDescription,
+      };
+
+      if (editingService) {
+        await api.put(`/services/${editingService.id}`, payload);
+      } else {
+        await api.post("/services", payload);
+      }
+
+      setServiceModalVisible(false);
+      await fetchServices();
+
+      if (editingService && selectedService === editingService.id) {
+        await SecureStore.setItemAsync("autoflow_service_name", cleanName);
+      }
+
+      Alert.alert(
+        "Success",
+        editingService ? "Service updated successfully." : "Service created successfully.",
+      );
+    } catch (err: any) {
+      console.log("Save service error:", err?.response?.data || err?.message);
+      setServiceFormError(
+        err?.response?.data?.message ||
+          err?.response?.data?.error ||
+          "Unable to save service. Please try again.",
+      );
+    } finally {
+      setServiceSaving(false);
+    }
+  };
+
+  const confirmDeleteService = (service: Service) => {
+    Alert.alert(
+      "Delete service?",
+      `“${service.name}” will be removed from the active service list. Existing customer and payment history will not be deleted.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setDeletingServiceId(service.id);
+              await api.delete(`/services/${service.id}`);
+
+              if (selectedService === service.id) {
+                setSelectedService(null);
+              }
+              if (lastUsedId === service.id) {
+                setLastUsedId(null);
+              }
+
+              const savedId = await SecureStore.getItemAsync("autoflow_service_id");
+              if (savedId === service.id) {
+                await SecureStore.deleteItemAsync("autoflow_service_id");
+                await SecureStore.deleteItemAsync("autoflow_service_name");
+              }
+
+              await fetchServices();
+              Alert.alert("Deleted", "Service was removed from active services.");
+            } catch (err: any) {
+              console.log("Delete service error:", err?.response?.data || err?.message);
+              Alert.alert(
+                "Delete failed",
+                err?.response?.data?.message || "Unable to delete service. Please try again.",
+              );
+            } finally {
+              setDeletingServiceId(null);
+            }
+          },
+        },
+      ],
+    );
   };
 
   const handleContinue = async () => {
@@ -365,13 +497,19 @@ if (loading) {
         {/* Count */}
         {!error && services.length > 0 && (
           <View className="mb-3 mt-6 flex-row items-center justify-between">
-            <Text className="font-bold text-slate-800">Your services</Text>
-            <View className="rounded-full bg-blue-50 px-3 py-1">
-              <Text className="text-xs font-bold text-blue-600">
-                {services.length}{" "}
-                {services.length === 1 ? "service" : "services"}
+            <View>
+              <Text className="font-bold text-slate-800">Your services</Text>
+              <Text className="mt-1 text-xs text-slate-400">
+                {services.length} {services.length === 1 ? "service" : "services"}
               </Text>
             </View>
+            <Pressable
+              onPress={openCreateService}
+              className="flex-row items-center rounded-xl bg-blue-600 px-4 py-2.5"
+            >
+              <Feather name="plus" size={16} color="#FFFFFF" />
+              <Text className="ml-2 text-sm font-bold text-white">Add service</Text>
+            </Pressable>
           </View>
         )}
 
@@ -408,15 +546,17 @@ if (loading) {
               No services yet
             </Text>
             <Text className="mt-2 text-center text-sm leading-6 text-slate-500">
-              Your account has no active services. Add one from your business
-              account, then pull down to refresh.
+              You don’t have any active services yet. Create your first service to start managing customers and billing.
             </Text>
             <Pressable
-              onPress={handleRefresh}
+              onPress={openCreateService}
               className="mt-5 flex-row items-center rounded-xl bg-blue-600 px-6 py-3"
             >
-              <Feather name="refresh-cw" size={15} color="#FFFFFF" />
-              <Text className="ml-2 font-bold text-white">Refresh</Text>
+              <Feather name="plus" size={15} color="#FFFFFF" />
+              <Text className="ml-2 font-bold text-white">Create service</Text>
+            </Pressable>
+            <Pressable onPress={handleRefresh} className="mt-3 py-2">
+              <Text className="text-xs font-semibold text-slate-500">Refresh services</Text>
             </Pressable>
           </View>
         ) : (
@@ -427,8 +567,8 @@ if (loading) {
               const iconName = getServiceIcon(service.name);
 
               return (
+                <View key={service.id} className="mb-1">
                 <Pressable
-                  key={service.id}
                   onPress={() => setSelectedService(service.id)}
                   accessibilityRole="radio"
                   accessibilityState={{ selected: isSelected }}
@@ -473,6 +613,9 @@ if (loading) {
                       >
                         {service.description}
                       </Text>
+                      <Text className="mt-1 text-xs font-bold text-blue-700">
+                        Monthly price: ₹{service.monthlyPrice.toLocaleString("en-IN")}
+                      </Text>
                     </View>
 
                     <View
@@ -488,6 +631,29 @@ if (loading) {
                     </View>
                   </View>
                 </Pressable>
+                <View className="mt-2 flex-row justify-end gap-2">
+                  <Pressable
+                    onPress={() => openEditService(service)}
+                    disabled={deletingServiceId === service.id}
+                    className="flex-row items-center rounded-xl border border-blue-100 bg-white px-4 py-2"
+                  >
+                    <Feather name="edit-2" size={14} color="#2563EB" />
+                    <Text className="ml-2 text-xs font-bold text-blue-700">Edit</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => confirmDeleteService(service)}
+                    disabled={deletingServiceId === service.id}
+                    className="flex-row items-center rounded-xl border border-red-100 bg-white px-4 py-2"
+                  >
+                    {deletingServiceId === service.id ? (
+                      <ActivityIndicator size="small" color="#DC2626" />
+                    ) : (
+                      <Feather name="trash-2" size={14} color="#DC2626" />
+                    )}
+                    <Text className="ml-2 text-xs font-bold text-red-600">Delete</Text>
+                  </Pressable>
+                </View>
+                </View>
               );
             })}
           </View>
@@ -511,6 +677,101 @@ if (loading) {
           </View>
         )}
       </ScrollView>
+
+      {/* Create / Edit service modal */}
+      <Modal
+        visible={serviceModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => !serviceSaving && setServiceModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          className="flex-1 justify-end bg-black/40"
+        >
+          <Pressable
+            className="flex-1"
+            onPress={() => !serviceSaving && setServiceModalVisible(false)}
+          />
+          <View className="rounded-t-3xl bg-white px-5 pb-8 pt-5">
+            <View className="mb-5 flex-row items-center justify-between">
+              <View>
+                <Text className="text-xl font-extrabold text-slate-900">
+                  {editingService ? "Edit service" : "Create service"}
+                </Text>
+                <Text className="mt-1 text-xs text-slate-500">
+                  Manage service name, monthly price and description.
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => !serviceSaving && setServiceModalVisible(false)}
+                className="h-9 w-9 items-center justify-center rounded-full bg-slate-100"
+              >
+                <Feather name="x" size={18} color="#475569" />
+              </Pressable>
+            </View>
+
+            <Text className="mb-2 text-sm font-semibold text-slate-700">Service name *</Text>
+            <TextInput
+              value={serviceNameInput}
+              onChangeText={setServiceNameInput}
+              placeholder="e.g. Car Cleaning"
+              editable={!serviceSaving}
+              className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-base text-slate-900"
+              placeholderTextColor="#94A3B8"
+              maxLength={80}
+            />
+
+            <Text className="mb-2 mt-4 text-sm font-semibold text-slate-700">Monthly price (₹) *</Text>
+            <TextInput
+              value={monthlyPriceInput}
+              onChangeText={setMonthlyPriceInput}
+              placeholder="0"
+              editable={!serviceSaving}
+              keyboardType="decimal-pad"
+              className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-base text-slate-900"
+              placeholderTextColor="#94A3B8"
+            />
+
+            <Text className="mb-2 mt-4 text-sm font-semibold text-slate-700">Description</Text>
+            <TextInput
+              value={descriptionInput}
+              onChangeText={setDescriptionInput}
+              placeholder="Describe this service"
+              editable={!serviceSaving}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+              className="min-h-[88px] rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-base text-slate-900"
+              placeholderTextColor="#94A3B8"
+              maxLength={500}
+            />
+
+            {serviceFormError ? (
+              <View className="mt-3 rounded-xl bg-red-50 px-3 py-2.5">
+                <Text className="text-xs font-semibold text-red-600">{serviceFormError}</Text>
+              </View>
+            ) : null}
+
+            <Pressable
+              onPress={handleSaveService}
+              disabled={serviceSaving}
+              className={`mt-5 items-center rounded-2xl py-4 ${serviceSaving ? "bg-blue-400" : "bg-blue-600"}`}
+            >
+              {serviceSaving ? (
+                <View className="flex-row items-center">
+                  <ActivityIndicator color="#FFFFFF" />
+                  <Text className="ml-2 font-bold text-white">Saving...</Text>
+                </View>
+              ) : (
+                <Text className="text-base font-bold text-white">
+                  {editingService ? "Save changes" : "Create service"}
+                </Text>
+              )}
+            </Pressable>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* Bottom continue bar */}
       {!error && services.length > 0 && (
