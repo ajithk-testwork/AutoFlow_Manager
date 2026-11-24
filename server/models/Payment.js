@@ -12,6 +12,7 @@ const paymentSchema = new mongoose.Schema(
     serviceId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Service",
+      required: true,
     },
 
     customerId: {
@@ -20,10 +21,10 @@ const paymentSchema = new mongoose.Schema(
       required: true,
     },
 
-    // Payment month
     month: {
       type: String,
       required: true,
+      trim: true,
     },
 
     // Customer details snapshot
@@ -47,27 +48,30 @@ const paymentSchema = new mongoose.Schema(
       default: "",
     },
 
-    // Original amount when this month's payment was created
+    // Original billing amount for this month
     baseAmount: {
       type: Number,
+      required: true,
       default: 0,
+      min: 0,
     },
 
-    // Final payable amount
+    // Final payable amount after missed-day adjustment
     amount: {
       type: Number,
       required: true,
+      min: 0,
     },
 
     status: {
       type: String,
+      enum: ["Paid", "Pending"],
       default: "Pending",
     },
 
     dailyStatus: [
       {
         date: String,
-
         status: {
           type: String,
           enum: ["Cleaned", "Missed"],
@@ -79,33 +83,43 @@ const paymentSchema = new mongoose.Schema(
     missedDays: {
       type: Number,
       default: 0,
+      min: 0,
     },
 
-    paidDate: String,
+    paidDate: {
+      type: String,
+      default: null,
+    },
   },
   {
     timestamps: true,
   }
 );
 
-// Indexes
-paymentSchema.index({
-  tenantId: 1,
-});
+// Query indexes
+paymentSchema.index({ tenantId: 1 });
+paymentSchema.index({ customerId: 1 });
+paymentSchema.index({ month: 1 });
 
-paymentSchema.index({
-  customerId: 1,
-});
-
-paymentSchema.index({
-  month: 1,
-});
-
-// Optimized month + service + tenant lookup
+// Monthly payment lookup
 paymentSchema.index({
   tenantId: 1,
   serviceId: 1,
   month: 1,
 });
+
+// Prevent duplicate monthly payment records
+paymentSchema.index(
+  {
+    tenantId: 1,
+    serviceId: 1,
+    customerId: 1,
+    month: 1,
+  },
+  {
+    unique: true,
+    name: "unique_customer_month_payment",
+  }
+);
 
 export default mongoose.model("Payment", paymentSchema);

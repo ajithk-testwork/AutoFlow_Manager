@@ -15,7 +15,7 @@ import {
   View,
 } from "react-native";
 import * as SecureStore from "expo-secure-store";
-import { router, useFocusEffect } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 
 import { api } from "../../api/client";
 
@@ -121,6 +121,10 @@ export default function CustomersScreen() {
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const { editCustomerId } = useLocalSearchParams<{
+    editCustomerId?: string;
+  }>();
 
   const [modalVisible, setModalVisible] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
@@ -286,6 +290,20 @@ export default function CustomersScreen() {
     setFormErrors({});
     setModalVisible(true);
   };
+
+  useEffect(() => {
+    if (!editCustomerId || loading) return;
+
+    const customer = customers.find((item) => item._id === editCustomerId);
+
+    if (customer && !isHistorical) {
+      openEditModal(customer);
+
+      router.setParams({
+        editCustomerId: undefined,
+      });
+    }
+  }, [editCustomerId, loading, customers, isHistorical]);
 
   const validateForm = () => {
     const errors: Partial<Record<FormKey, string>> = {};

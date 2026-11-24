@@ -238,17 +238,37 @@ export const addCustomer = async (req, res) => {
 
 export const deleteCustomer = async (req, res) => {
   try {
-    await Customer.findOneAndDelete({
-      _id: req.params.id,
+    const customer = await Customer.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        tenantId: req.user.tenantId,
+      },
+      {
+        $set: {
+          isActive: false,
+        },
+      },
+      {
+        new: true,
+      },
+    );
 
-      tenantId: req.user.tenantId,
-    });
+    if (!customer) {
+      return res.status(404).json({
+        success: false,
+        message: "Customer not found",
+      });
+    }
 
-    res.json({
-      message: "Deleted",
+    return res.status(200).json({
+      success: true,
+      message: "Customer deactivated successfully. Payment history preserved.",
     });
-  } catch {
-    res.status(500).json({
+  } catch (error) {
+    console.error("Delete Customer Error:", error);
+
+    return res.status(500).json({
+      success: false,
       message: "Delete failed",
     });
   }
@@ -288,7 +308,6 @@ export const togglePayment = async (req, res) => {
   }
 };
 
-
 export const getPaymentsByMonth = async (req, res) => {
   try {
     const { month, serviceId } = req.query;
@@ -316,32 +335,18 @@ export const getPaymentsByMonth = async (req, res) => {
       });
     }
 
-    // Get only existing customers
-    // Deleted customers will not be included
-    const customerIds = await Customer.distinct("_id", {
-      tenantId,
-      serviceId,
-    });
-
-    // Fetch payments only for existing customers
     const payments = await Payment.find({
       tenantId,
       serviceId,
       month: month.trim(),
-      customerId: {
-        $in: customerIds,
-      },
     })
       .populate(
         "customerId",
-        "name phone doorNumber vehicleName monthlyAmount gender isActive serviceId"
+        "name phone doorNumber vehicleName monthlyAmount gender isActive",
       )
-      .sort({
-        createdAt: 1,
-      });
+      .sort({ createdAt: 1 });
 
     return res.status(200).json(payments);
-
   } catch (error) {
     console.error("Get Payments Error:", error);
 
@@ -351,7 +356,6 @@ export const getPaymentsByMonth = async (req, res) => {
     });
   }
 };
-
 
 export const getSinglePayment = async (req, res) => {
   try {
@@ -555,50 +559,145 @@ export const updateDailyStatus = async (req, res) => {
   }
 };
 
+
+
 export const updateCustomer = async (req, res) => {
   try {
-    const { name, phone, doorNumber, vehicleName, monthlyAmount, gender } =
-      req.body;
+    const {
+      name,
+      phone,
+      doorNumber,
+      vehicleName,
+      monthlyAmount,
+      gender,
+      month,
+    } = req.body;
 
-    const updatedCustomer = await Customer.findOneAndUpdate(
-      {
-        _id: req.params.id,
-        tenantId: req.user.tenantId,
-      },
-      {
-        name,
-        phone,
-        doorNumber,
-        vehicleName,
-        monthlyAmount,
-        gender,
-      },
-      {
-        new: true,
-        runValidators: true,
-      },
+    const tenantId = req.user.tenantId;
+
+    // 1. Validate month
+    const validMonth = typeof month === "string"
+      ? month.trim()
+      : "";
+
+    const monthMatch = validMonth.match(
+      /^(January|February|March|April|May|June|July|August|September|October|November|December)\s(\d{4})$/
     );
 
-    if (!updatedCustomer) {
+    if (!monthMatch) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid billing month",
+      });
+    }
+
+    const monthName = monthMatch[1];
+    const year = Number(monthMatch[2]);
+
+    const monthIndex = new Date(
+      Date.parse(`${monthName} 1, ${year}`)
+    ).getMonth();
+
+    if (Number.isNaN(monthIndex)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid billing month",
+      });
+    }
+
+    // 2. Validate amount
+    const amount = Number(monthlyAmount);
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid monthly amount",
+      });
+    }
+
+    // 3. Find customer
+    const customer = await Customer.findOne({
+      _id: req.params.id,
+      tenantId,
+    });
+
+    if (!customer) {
       return res.status(404).json({
         success: false,
         message: "Customer not found",
       });
     }
 
-    return res.json({
-      success: true,
-      customer: updatedCustomer,
+    // 4. Find current month's pending payment
+    const payment = await Payment.findOne({
+      tenantId,
+      serviceId: customer.serviceId,
+      customerId: customer._id,
+      month: validMonth,
+      status: "Pending",
     });
+
+    // 5. Update customer details
+    customer.name = name;
+    customer.phone = phone;
+    customer.doorNumber = doorNumber || "";
+    customer.vehicleName = vehicleName || "";
+    customer.monthlyAmount = amount;
+    customer.gender = gender || customer.gender;
+
+    await customer.save();
+
+    // 6. Update only pending payment
+    if (payment) {
+      payment.customerName = customer.name;
+      payment.customerPhone = customer.phone;
+      payment.customerDoorNumber = customer.doorNumber;
+      payment.customerVehicleName = customer.vehicleName;
+
+      payment.baseAmount = amount;
+
+      // Preserve missed-day adjustment
+      const daysInMonth = new Date(
+        year,
+        monthIndex + 1,
+        0
+      ).getDate();
+
+      const missedDays = Number(payment.missedDays) || 0;
+
+      const safeMissedDays = Math.min(
+        missedDays,
+        daysInMonth
+      );
+
+      const perDay = amount / daysInMonth;
+
+      payment.amount = Math.max(
+        0,
+        Math.round(amount - safeMissedDays * perDay)
+      );
+
+      await payment.save();
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Customer updated successfully",
+      customer,
+      paymentUpdated: Boolean(payment),
+      payment,
+    });
+
   } catch (error) {
     console.error("Update Customer Error:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Update failed",
     });
   }
 };
+
 
 
 export const getGlobalHistory = async (req, res) => {
@@ -612,7 +711,6 @@ export const getGlobalHistory = async (req, res) => {
       });
     }
 
-    // Verify service ownership
     const service = await Service.findOne({
       _id: serviceId,
       tenantId,
@@ -625,23 +723,15 @@ export const getGlobalHistory = async (req, res) => {
       });
     }
 
-    // Get only customers that actually exist
-    // Includes inactive customers because their history
-    // should remain available.
-    const customerIds = await Customer.distinct("_id", {
-      tenantId,
-      serviceId,
-    });
-
-    // Ignore orphan payments belonging to deleted customers
+    // Payment collection is the source of truth.
+    // Do not filter by currently existing customers.
     const payments = await Payment.find({
       tenantId,
       serviceId,
-      customerId: { $in: customerIds },
     })
       .populate(
         "customerId",
-        "name phone doorNumber vehicleName monthlyAmount gender isActive"
+        "name phone doorNumber vehicleName gender isActive",
       )
       .sort({ createdAt: -1 });
 
@@ -661,19 +751,16 @@ export const getGlobalHistory = async (req, res) => {
 
       groupedHistory[month].payments.push(payment);
 
+      const amount = Number(payment.amount) || 0;
+
       if (payment.status === "Paid") {
-        groupedHistory[month].collected +=
-          Number(payment.amount) || 0;
+        groupedHistory[month].collected += amount;
       } else {
-        groupedHistory[month].pending +=
-          Number(payment.amount) || 0;
+        groupedHistory[month].pending += amount;
       }
     });
 
-    return res.status(200).json(
-      Object.values(groupedHistory)
-    );
-
+    return res.status(200).json(Object.values(groupedHistory));
   } catch (error) {
     console.error("Global History Error:", error);
 
@@ -682,7 +769,6 @@ export const getGlobalHistory = async (req, res) => {
     });
   }
 };
-
 
 export const markWelcomeSent = async (req, res) => {
   try {

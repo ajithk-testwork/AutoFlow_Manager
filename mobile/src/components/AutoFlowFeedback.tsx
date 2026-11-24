@@ -1,396 +1,548 @@
+
 import React, { useEffect, useRef } from "react";
+
 import {
-  ActivityIndicator,
+  View,
+  Text,
+  StyleSheet,
   Animated,
   Easing,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
+  ActivityIndicator,
 } from "react-native";
 
-type FeedbackMode = "loading" | "error" | "empty" | "success";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 
-type AutoFlowFeedbackProps = {
-  mode: FeedbackMode;
+type FeedbackMode = "loading" | "error" | "success" | "empty";
+
+interface AutoFlowFeedbackProps {
+  mode?: FeedbackMode;
   title?: string;
   message?: string;
-  retryLabel?: string;
-  onRetry?: () => void;
-  onSecondaryAction?: () => void;
-  secondaryLabel?: string;
-};
+  visible?: boolean;
+}
+
+const BLUE = "#2563EB";
+const NAVY = "#172554";
+const MUTED = "#64748B";
 
 export default function AutoFlowFeedback({
-  mode,
+  mode = "loading",
   title,
   message,
-  retryLabel = "Try again",
-  onRetry,
-  onSecondaryAction,
-  secondaryLabel,
+  visible = true,
 }: AutoFlowFeedbackProps) {
-  const spin = useRef(new Animated.Value(0)).current;
+  // Animation values
+  const orbitRotation = useRef(new Animated.Value(0)).current;
+  const reverseRotation = useRef(new Animated.Value(0)).current;
   const pulse = useRef(new Animated.Value(1)).current;
-  const appear = useRef(new Animated.Value(0)).current;
-  const shake = useRef(new Animated.Value(0)).current;
+  const particleMovement = useRef(new Animated.Value(0)).current;
+  const successScale = useRef(new Animated.Value(0.6)).current;
 
   useEffect(() => {
-    appear.setValue(0);
-    Animated.spring(appear, {
-      toValue: 1,
-      friction: 7,
-      tension: 55,
-      useNativeDriver: true,
-    }).start();
+    if (!visible || mode !== "loading") {
+      orbitRotation.stopAnimation();
+      reverseRotation.stopAnimation();
+      pulse.stopAnimation();
+      particleMovement.stopAnimation();
 
-    if (mode === "loading") {
-      spin.setValue(0);
-      const rotation = Animated.loop(
-        Animated.timing(spin, {
-          toValue: 1,
-          duration: 1200,
-          easing: Easing.linear,
-          useNativeDriver: true,
-        }),
-      );
-
-      pulse.setValue(1);
-      const pulsing = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulse, {
-            toValue: 1.08,
-            duration: 750,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulse, {
-            toValue: 1,
-            duration: 750,
-            useNativeDriver: true,
-          }),
-        ]),
-      );
-
-      rotation.start();
-      pulsing.start();
-      return () => {
-        rotation.stop();
-        pulsing.stop();
-      };
+      return;
     }
 
-    if (mode === "error") {
-      shake.setValue(0);
+    orbitRotation.setValue(0);
+    reverseRotation.setValue(0);
+    pulse.setValue(1);
+    particleMovement.setValue(0);
+
+    const outerOrbit = Animated.loop(
+      Animated.timing(orbitRotation, {
+        toValue: 1,
+        duration: 9000,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    );
+
+    const innerOrbit = Animated.loop(
+      Animated.timing(reverseRotation, {
+        toValue: 1,
+        duration: 6500,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    );
+
+    // Very subtle light pulse. The car itself never moves.
+    const glowPulse = Animated.loop(
       Animated.sequence([
-        Animated.timing(shake, {
+        Animated.timing(pulse, {
+          toValue: 1.045,
+          duration: 1800,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
           toValue: 1,
-          duration: 70,
+          duration: 1800,
+          easing: Easing.inOut(Easing.ease),
           useNativeDriver: true,
         }),
-        Animated.timing(shake, {
-          toValue: -1,
-          duration: 70,
-          useNativeDriver: true,
-        }),
-        Animated.timing(shake, {
-          toValue: 0.6,
-          duration: 70,
-          useNativeDriver: true,
-        }),
-        Animated.timing(shake, {
-          toValue: 0,
-          duration: 70,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }
-  }, [mode, appear, pulse, shake, spin]);
+      ])
+    );
 
-  const rotation = spin.interpolate({
+    const particles = Animated.loop(
+      Animated.timing(particleMovement, {
+        toValue: 1,
+        duration: 2200,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    );
+
+    outerOrbit.start();
+    innerOrbit.start();
+    glowPulse.start();
+    particles.start();
+
+    return () => {
+      outerOrbit.stop();
+      innerOrbit.stop();
+      glowPulse.stop();
+      particles.stop();
+    };
+  }, [
+    visible,
+    mode,
+    orbitRotation,
+    reverseRotation,
+    pulse,
+    particleMovement,
+  ]);
+
+  useEffect(() => {
+    if (!visible || mode !== "success") return;
+
+    successScale.setValue(0.6);
+
+    const animation = Animated.spring(successScale, {
+      toValue: 1,
+      friction: 6,
+      tension: 80,
+      useNativeDriver: true,
+    });
+
+    animation.start();
+
+    return () => animation.stop();
+  }, [visible, mode, successScale]);
+
+  if (!visible) return null;
+
+  const rotate = orbitRotation.interpolate({
     inputRange: [0, 1],
     outputRange: ["0deg", "360deg"],
   });
 
-  const shakeX = shake.interpolate({
-    inputRange: [-1, 1],
-    outputRange: [-7, 7],
-  });
-
-  const translateY = appear.interpolate({
+  const reverseRotate = reverseRotation.interpolate({
     inputRange: [0, 1],
-    outputRange: [14, 0],
+    outputRange: ["360deg", "0deg"],
   });
 
-  const content = {
-    loading: {
-      icon: "↻",
-      iconBg: "#EAF2FF",
-      iconColor: "#2563EB",
-      heading: title || "Loading your data",
-      description: message || "Please wait while we get everything ready.",
-    },
-    error: {
-      icon: "!",
-      iconBg: "#FFF0F0",
-      iconColor: "#DC2626",
-      heading: title || "Something went wrong",
-      description:
-        message ||
-        "We couldn't load your data. Check your connection and try again.",
-    },
-    empty: {
-      icon: "—",
-      iconBg: "#F1F5F9",
-      iconColor: "#64748B",
-      heading: title || "Nothing here yet",
-      description: message || "There is no data to display right now.",
-    },
-    success: {
-      icon: "✓",
-      iconBg: "#EAFBF1",
-      iconColor: "#16A34A",
-      heading: title || "All done!",
-      description: message || "Your action was completed successfully.",
-    },
-  }[mode];
+  const particleX = particleMovement.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-85, 85],
+  });
+
+  const particleOpacity = particleMovement.interpolate({
+    inputRange: [0, 0.1, 0.85, 1],
+    outputRange: [0, 1, 1, 0],
+  });
+
+  const getContent = () => {
+    switch (mode) {
+      case "error":
+        return {
+          title: title || "Something went wrong",
+          message: message || "Please try again in a moment.",
+        };
+
+      case "success":
+        return {
+          title: title || "All Done!",
+          message: message || "Your action completed successfully.",
+        };
+
+      case "empty":
+        return {
+          title: title || "Nothing here yet",
+          message: message || "Your data will appear here.",
+        };
+
+      default:
+        return {
+          title: title || "Preparing your workspace",
+          message: message || "Syncing your business data securely...",
+        };
+    }
+  };
+
+  const content = getContent();
 
   return (
-    <View style={styles.screen}>
-      <Animated.View
-        style={[
-          styles.card,
-          {
-            opacity: appear,
-            transform: [
-              { translateY },
-              ...(mode === "loading" ? [{ scale: pulse }] : []),
-            ],
-          },
-        ]}
-      >
-        <View style={styles.artwork}>
-          {mode === "loading" ? (
-            <>
-              <View style={styles.outerRing} />
-              <Animated.View
-                style={[
-                  styles.spinnerRing,
-                  { transform: [{ rotate: rotation }] },
-                ]}
-              >
-                <View style={styles.spinnerDot} />
-              </Animated.View>
-              <View
-                style={[styles.iconCircle, { backgroundColor: content.iconBg }]}
-              >
-                <Text style={[styles.iconText, { color: content.iconColor }]}>
-                  ↻
-                </Text>
-              </View>
-            </>
-          ) : (
+    <View style={styles.container}>
+      {mode === "loading" && (
+        <>
+          <View style={styles.visualContainer}>
+            {/* Ambient background glow */}
+            <View style={styles.ambientGlow} />
+
+            {/* Outer orbit */}
             <Animated.View
               style={[
-                styles.iconCircle,
-                styles.largeIconCircle,
-                {
-                  backgroundColor: content.iconBg,
-                  transform: [{ translateX: shakeX }],
-                },
+                styles.outerOrbit,
+                { transform: [{ rotate }] },
               ]}
             >
-              <Text
-                style={[
-                  styles.iconText,
-                  styles.largeIconText,
-                  { color: content.iconColor },
-                ]}
-              >
-                {content.icon}
-              </Text>
+              <View style={styles.orbitDot} />
+              <View style={styles.orbitDotSecondary} />
             </Animated.View>
-          )}
-        </View>
 
-        <Text style={styles.title}>{content.heading}</Text>
-        <Text style={styles.message}>{content.description}</Text>
+            {/* Middle orbit */}
+            <Animated.View
+              style={[
+                styles.middleOrbit,
+                { transform: [{ rotate: reverseRotate }] },
+              ]}
+            >
+              <View style={styles.middleOrbitDot} />
+            </Animated.View>
 
-        {mode === "loading" ? (
-          <View style={styles.loadingRow}>
-            <ActivityIndicator size="small" color="#2563EB" />
-            <Text style={styles.loadingText}>Please wait…</Text>
+            {/* Inner orbital circle */}
+            <View style={styles.innerOrbit} />
+
+            {/* Static vehicle */}
+            <Animated.View
+              style={[
+                styles.vehicleContainer,
+                { transform: [{ scale: pulse }] },
+              ]}
+            >
+              <View style={styles.vehicleGlow} />
+
+              <MaterialCommunityIcons
+                name="car-sports"
+                size={76}
+                color={BLUE}
+              />
+            </Animated.View>
+
+            {/* Moving light particle */}
+            <Animated.View
+              style={[
+                styles.particle,
+                {
+                  opacity: particleOpacity,
+                  transform: [{ translateX: particleX }],
+                },
+              ]}
+            />
+
+            {/* Bottom decorative line */}
+            <View style={styles.baseLine} />
           </View>
-        ) : null}
 
-        {mode === "error" && onRetry ? (
-          <Pressable
-            accessibilityRole="button"
-            onPress={onRetry}
-            style={({ pressed }) => [
-              styles.primaryButton,
-              pressed && styles.pressed,
-            ]}
-          >
-            <Text style={styles.primaryButtonText}>{retryLabel}</Text>
-          </Pressable>
-        ) : null}
+          <View style={styles.loadingBadge}>
+            <View style={styles.liveDot} />
+            <Text style={styles.loadingBadgeText}>
+              AUTO FLOW ENGINE
+            </Text>
+          </View>
+        </>
+      )}
 
-        {onSecondaryAction && secondaryLabel ? (
-          <Pressable
-            accessibilityRole="button"
-            onPress={onSecondaryAction}
-            style={({ pressed }) => [
-              styles.secondaryButton,
-              pressed && styles.pressed,
-            ]}
-          >
-            <Text style={styles.secondaryButtonText}>{secondaryLabel}</Text>
-          </Pressable>
-        ) : null}
+      {mode === "error" && (
+        <View style={[styles.statusIcon, styles.errorIcon]}>
+          <MaterialCommunityIcons
+            name="alert-circle-outline"
+            size={48}
+            color="#DC2626"
+          />
+        </View>
+      )}
 
-        <Text style={styles.brand}>AUTOFLOW MANAGER</Text>
-      </Animated.View>
+      {mode === "success" && (
+        <Animated.View
+          style={[
+            styles.statusIcon,
+            styles.successIcon,
+            { transform: [{ scale: successScale }] },
+          ]}
+        >
+          <MaterialCommunityIcons
+            name="check-circle-outline"
+            size={48}
+            color="#16A34A"
+          />
+        </Animated.View>
+      )}
+
+      {mode === "empty" && (
+        <View style={[styles.statusIcon, styles.emptyIcon]}>
+          <MaterialCommunityIcons
+            name="database-search-outline"
+            size={48}
+            color="#64748B"
+          />
+        </View>
+      )}
+
+      <Text style={styles.title}>{content.title}</Text>
+
+      <Text style={styles.message}>{content.message}</Text>
+
+      {mode === "loading" && (
+        <View style={styles.progressContainer}>
+          <View style={styles.progressTrack}>
+            <Animated.View
+              style={[
+                styles.progressHighlight,
+                { transform: [{ translateX: particleX }] },
+              ]}
+            />
+          </View>
+          <Text style={styles.progressLabel}>PLEASE WAIT</Text>
+        </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
+  container: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
+    minHeight: 320,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 24,
+    backgroundColor: "#F8FAFF",
   },
-  card: {
-    width: "100%",
-    maxWidth: 420,
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 28,
-    paddingHorizontal: 26,
-    paddingTop: 34,
-    paddingBottom: 28,
-    borderWidth: 1,
-    borderColor: "#E9EEF5",
-    shadowColor: "#0F172A",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.06,
-    shadowRadius: 24,
-    elevation: 3,
-  },
-  artwork: {
-    height: 142,
-    width: 142,
+
+  visualContainer: {
+    width: 260,
+    height: 250,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 24,
+    marginBottom: 12,
   },
-  outerRing: {
+
+  ambientGlow: {
+    position: "absolute",
+    width: 190,
+    height: 190,
+    borderRadius: 100,
+    backgroundColor: "#DBEAFE",
+    opacity: 0.55,
+  },
+
+  outerOrbit: {
+    position: "absolute",
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    borderWidth: 1.5,
+    borderColor: "#BFDBFE",
+    borderStyle: "dashed",
+  },
+
+  orbitDot: {
+    position: "absolute",
+    top: 20,
+    right: 30,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "#2563EB",
+    borderWidth: 3,
+    borderColor: "#DBEAFE",
+  },
+
+  orbitDotSecondary: {
+    position: "absolute",
+    bottom: 20,
+    left: 30,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#38BDF8",
+  },
+
+  middleOrbit: {
+    position: "absolute",
+    width: 174,
+    height: 174,
+    borderRadius: 87,
+    borderWidth: 2,
+    borderColor: "#93C5FD",
+    borderLeftColor: "transparent",
+    borderBottomColor: "transparent",
+  },
+
+  middleOrbitDot: {
+    position: "absolute",
+    bottom: 15,
+    right: 22,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: "#0EA5E9",
+  },
+
+  innerOrbit: {
     position: "absolute",
     width: 132,
     height: 132,
     borderRadius: 66,
     borderWidth: 1,
     borderColor: "#DBEAFE",
+    backgroundColor: "rgba(255,255,255,0.65)",
   },
-  spinnerRing: {
-    position: "absolute",
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 4,
-    borderColor: "#BFDBFE",
-    borderTopColor: "#2563EB",
-    borderRightColor: "#2563EB",
-  },
-  spinnerDot: {
-    position: "absolute",
-    top: -5,
-    left: 52,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: "#2563EB",
-  },
-  iconCircle: {
-    width: 78,
-    height: 78,
-    borderRadius: 39,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  largeIconCircle: {
+
+  vehicleContainer: {
     width: 112,
     height: 112,
-    borderRadius: 56,
-  },
-  iconText: {
-    fontSize: 38,
-    fontWeight: "800",
-  },
-  largeIconText: {
-    fontSize: 58,
-  },
-  title: {
-    color: "#0F172A",
-    fontSize: 22,
-    lineHeight: 29,
-    fontWeight: "800",
-    textAlign: "center",
-  },
-  message: {
-    marginTop: 10,
-    maxWidth: 300,
-    color: "#64748B",
-    fontSize: 14,
-    lineHeight: 22,
-    textAlign: "center",
-  },
-  loadingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 9,
-    marginTop: 24,
-  },
-  loadingText: {
-    color: "#2563EB",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  primaryButton: {
-    width: "100%",
-    minHeight: 52,
-    marginTop: 26,
-    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#2563EB",
+    borderRadius: 56,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#DBEAFE",
+    shadowColor: "#2563EB",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    elevation: 6,
   },
-  primaryButtonText: {
-    color: "#FFFFFF",
-    fontSize: 15,
-    fontWeight: "800",
+
+  vehicleGlow: {
+    position: "absolute",
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: "#EFF6FF",
   },
-  secondaryButton: {
-    paddingVertical: 15,
-    paddingHorizontal: 18,
-    marginTop: 5,
+
+  particle: {
+    position: "absolute",
+    bottom: 28,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#0EA5E9",
+    shadowColor: "#0EA5E9",
+    shadowOpacity: 0.8,
+    shadowRadius: 8,
   },
-  secondaryButtonText: {
-    color: "#64748B",
-    fontSize: 14,
-    fontWeight: "700",
+
+  baseLine: {
+    position: "absolute",
+    bottom: 15,
+    width: 80,
+    height: 2,
+    borderRadius: 2,
+    backgroundColor: "#BFDBFE",
   },
-  pressed: {
-    opacity: 0.82,
-    transform: [{ scale: 0.98 }],
+
+  loadingBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingHorizontal: 13,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: "#EFF6FF",
+    borderWidth: 1,
+    borderColor: "#DBEAFE",
+    marginBottom: 14,
   },
-  brand: {
-    marginTop: 28,
-    color: "#94A3B8",
+
+  liveDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: "#16A34A",
+  },
+
+  loadingBadgeText: {
     fontSize: 10,
     fontWeight: "800",
-    letterSpacing: 2,
+    letterSpacing: 1.4,
+    color: "#2563EB",
+  },
+
+  title: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: NAVY,
+    textAlign: "center",
+    marginTop: 8,
+    letterSpacing: -0.4,
+  },
+
+  message: {
+    fontSize: 13,
+    color: MUTED,
+    textAlign: "center",
+    marginTop: 8,
+    lineHeight: 20,
+    maxWidth: 280,
+  },
+
+  progressContainer: {
+    width: 150,
+    alignItems: "center",
+    marginTop: 22,
+  },
+
+  progressTrack: {
+    width: 150,
+    height: 4,
+    borderRadius: 5,
+    backgroundColor: "#DBEAFE",
+    overflow: "hidden",
+  },
+
+  progressHighlight: {
+    width: 55,
+    height: 4,
+    borderRadius: 5,
+    backgroundColor: BLUE,
+  },
+
+  progressLabel: {
+    marginTop: 10,
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 1.5,
+    color: "#94A3B8",
+  },
+
+  statusIcon: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+
+  errorIcon: {
+    backgroundColor: "#FEF2F2",
+  },
+
+  successIcon: {
+    backgroundColor: "#F0FDF4",
+  },
+
+  emptyIcon: {
+    backgroundColor: "#F1F5F9",
   },
 });

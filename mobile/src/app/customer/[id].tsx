@@ -1,3 +1,4 @@
+
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -6,21 +7,82 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
+  StatusBar,
   Text,
   View,
 } from "react-native";
+
 import { Stack, useLocalSearchParams, router } from "expo-router";
-import { api } from "../../api/client";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import { api } from "../../api/client";
 
 type PaymentRecord = {
   _id?: string;
-  month?: string;
-  amount?: number;
-  status?: string;
-  dailyStatus?: string;
+  month?: unknown;
+  amount?: number | string;
+  status?: unknown;
+  dailyStatus?: unknown;
   missedDays?: number;
   paidDate?: string;
+};
+
+const getDisplayText = (
+  value: unknown,
+  fallback = ""
+): string => {
+  if (value === null || value === undefined) {
+    return fallback;
+  }
+
+  if (
+    typeof value === "string" ||
+    typeof value === "number"
+  ) {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    return (
+      value
+        .map((item) => getDisplayText(item))
+        .filter(Boolean)
+        .join(", ") || fallback
+    );
+  }
+
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+
+    const fields = [
+      "label",
+      "name",
+      "title",
+      "status",
+      "value",
+      "date",
+      "day",
+    ];
+
+    for (const field of fields) {
+      const fieldValue = record[field];
+
+      if (
+        typeof fieldValue === "string" ||
+        typeof fieldValue === "number"
+      ) {
+        return String(fieldValue);
+      }
+    }
+  }
+
+  return fallback;
+};
+
+const formatAmount = (amount: number) => {
+  const safeAmount = Number.isFinite(amount) ? amount : 0;
+
+  return `₹${safeAmount.toLocaleString("en-IN")}`;
 };
 
 export default function CustomerOverviewScreen() {
@@ -33,6 +95,9 @@ export default function CustomerOverviewScreen() {
     monthlyAmount?: string;
     gender?: string;
     isActive?: string;
+    isHistorical?: string;
+    billingAmount?: string;
+    selectedMonth?: string;
   }>();
 
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
@@ -40,29 +105,29 @@ export default function CustomerOverviewScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
 
- 
-const customer = {
-  id: params.id,
-  name: params.name || "Customer",
-  phone: params.phone || "",
-  vehicleName: params.vehicleName || "",
-  doorNumber: params.doorNumber || "",
-  monthlyAmount: Number(params.monthlyAmount || 0),
-  gender: params.gender || "",
-  isActive: params.isActive === "true",
-  isHistorical: params.isHistorical === "true",
-  billingAmount: Number(
-    params.billingAmount || params.monthlyAmount || 0
-  ),
-  selectedMonth: params.selectedMonth || "",
-};
-
+  const customer = {
+    id: params.id,
+    name: params.name || "Customer",
+    phone: params.phone || "",
+    vehicleName: params.vehicleName || "",
+    doorNumber: params.doorNumber || "",
+    monthlyAmount: Number(params.monthlyAmount || 0),
+    gender: params.gender || "",
+    isActive: params.isActive === "true",
+    isHistorical: params.isHistorical === "true",
+    billingAmount: Number(
+      params.billingAmount || params.monthlyAmount || 0
+    ),
+    selectedMonth: params.selectedMonth || "",
+  };
 
   const loadHistory = useCallback(async () => {
     try {
       setError("");
 
-      const response = await api.get(`/${customer.id}/history`);
+      const response = await api.get(
+        `/${customer.id}/history`
+      );
 
       const result = response.data;
 
@@ -78,9 +143,14 @@ const customer = {
 
       setPayments(records);
     } catch (err: any) {
-      console.log("CUSTOMER HISTORY ERROR:", err.response?.data ?? err.message);
+      console.log(
+        "CUSTOMER HISTORY ERROR:",
+        err.response?.data ?? err.message
+      );
+
       setError(
-        err.response?.data?.message || "Unable to load payment history.",
+        err.response?.data?.message ||
+          "Unable to load payment history."
       );
     } finally {
       setLoading(false);
@@ -93,47 +163,92 @@ const customer = {
   }, [loadHistory]);
 
   const collected = payments
-    .filter((payment) => payment.status?.toLowerCase() === "paid")
-    .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    .filter(
+      (payment) =>
+        getDisplayText(payment.status).toLowerCase() === "paid"
+    )
+    .reduce(
+      (sum, payment) => sum + (Number(payment.amount) || 0),
+      0
+    );
 
   const pending = payments
-    .filter((payment) => payment.status?.toLowerCase() === "pending")
-    .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-
-  const formatAmount = (amount: number) => `₹${amount.toLocaleString("en-IN")}`;
+    .filter(
+      (payment) =>
+        getDisplayText(payment.status).toLowerCase() === "pending"
+    )
+    .reduce(
+      (sum, payment) => sum + (Number(payment.amount) || 0),
+      0
+    );
 
   const callCustomer = async () => {
     if (!customer.phone) {
-      Alert.alert("Phone unavailable", "Customer phone number is missing.");
+      Alert.alert(
+        "Phone unavailable",
+        "Customer phone number is missing."
+      );
       return;
     }
 
     try {
       await Linking.openURL(`tel:${customer.phone}`);
     } catch {
-      Alert.alert("Unable to call", "Phone app could not be opened.");
+      Alert.alert(
+        "Unable to call",
+        "Phone app could not be opened."
+      );
     }
   };
 
   const editCustomer = () => {
-    router.push({
+    router.navigate({
       pathname: "/(tabs)/customers",
-      params: { editCustomerId: customer.id },
+      params: {
+        editCustomerId: customer.id,
+      },
     });
   };
 
+  const customerInformation = [
+    ["Phone Number", customer.phone],
+    ["Vehicle", customer.vehicleName],
+    ["Door Number", customer.doorNumber],
+    ["Gender", customer.gender],
+    [
+      customer.isHistorical ? "Billed Amount" : "Monthly Amount",
+      formatAmount(customer.billingAmount),
+    ],
+  ];
+
   return (
     <>
-      <SafeAreaView className="flex-1 bg-slate-50" edges={["top", "bottom"]}>
-        <Stack.Screen
-          options={{
-            headerShown: false,
-          }}
-        />
+      <Stack.Screen
+        options={{
+          headerShown: false,
+          gestureEnabled: true,
+        }}
+      />
 
+      <StatusBar
+        barStyle="dark-content"
+        backgroundColor="#F8FAFC"
+      />
+
+      {/* Safe area handles iOS notch and Android system areas */}
+      <SafeAreaView
+        className="flex-1 bg-slate-50"
+        edges={["top", "bottom"]}
+        style={{ flex: 1 }}
+      >
         <ScrollView
           className="flex-1 bg-slate-50"
+          contentContainerStyle={{
+            flexGrow: 1,
+            paddingBottom: 24,
+          }}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -141,11 +256,14 @@ const customer = {
                 setRefreshing(true);
                 loadHistory();
               }}
+              tintColor="#2563EB"
+              colors={["#2563EB"]}
             />
           }
         >
           <View className="px-5 pb-10 pt-5">
-            {/* Profile */}
+
+            {/* Customer Profile */}
             <View className="rounded-2xl bg-white p-5 shadow-sm">
               <View className="flex-row items-center">
                 <View className="h-16 w-16 items-center justify-center rounded-2xl bg-blue-100">
@@ -165,12 +283,16 @@ const customer = {
 
                   <View
                     className={`mt-2 self-start rounded-full px-3 py-1 ${
-                      customer.isActive ? "bg-green-50" : "bg-red-50"
+                      customer.isActive
+                        ? "bg-green-50"
+                        : "bg-red-50"
                     }`}
                   >
                     <Text
                       className={`text-xs font-semibold ${
-                        customer.isActive ? "text-green-700" : "text-red-600"
+                        customer.isActive
+                          ? "text-green-700"
+                          : "text-red-600"
                       }`}
                     >
                       {customer.isActive
@@ -208,18 +330,15 @@ const customer = {
             </Text>
 
             <View className="rounded-2xl bg-white p-4">
-              {[
-                ["Phone Number", customer.phone],
-                ["Vehicle", customer.vehicleName],
-                ["Door Number", customer.doorNumber],
-                ["Gender", customer.gender],
-                [customer.isHistorical ? "Billed Amount" : "Monthly Amount", formatAmount(customer.billingAmount)],
-              ].map(([label, value]) => (
+              {customerInformation.map(([label, value]) => (
                 <View
                   key={label}
                   className="flex-row justify-between border-b border-slate-100 py-3"
                 >
-                  <Text className="text-sm text-slate-500">{label}</Text>
+                  <Text className="text-sm text-slate-500">
+                    {label}
+                  </Text>
+
                   <Text className="max-w-[60%] text-right text-sm font-semibold text-slate-900">
                     {value || "Not provided"}
                   </Text>
@@ -237,6 +356,7 @@ const customer = {
                 <Text className="text-xs font-semibold text-green-700">
                   COLLECTED
                 </Text>
+
                 <Text className="mt-2 text-xl font-bold text-green-700">
                   {formatAmount(collected)}
                 </Text>
@@ -246,6 +366,7 @@ const customer = {
                 <Text className="text-xs font-semibold text-red-600">
                   PENDING
                 </Text>
+
                 <Text className="mt-2 text-xl font-bold text-red-600">
                   {formatAmount(pending)}
                 </Text>
@@ -257,22 +378,33 @@ const customer = {
               <Text className="text-lg font-bold text-slate-900">
                 Payment History
               </Text>
+
               <Text className="text-xs text-slate-500">
                 {payments.length} records
               </Text>
             </View>
 
             {loading ? (
-              <ActivityIndicator
-                className="mt-6"
-                size="large"
-                color="#2563EB"
-              />
+              <View className="items-center rounded-2xl bg-white p-8">
+                <ActivityIndicator
+                  size="large"
+                  color="#2563EB"
+                />
+
+                <Text className="mt-3 text-sm text-slate-500">
+                  Loading payment history...
+                </Text>
+              </View>
             ) : error ? (
               <View className="rounded-xl bg-red-50 p-4">
-                <Text className="text-sm text-red-600">{error}</Text>
+                <Text className="text-sm text-red-600">
+                  {error}
+                </Text>
+
                 <Pressable onPress={loadHistory}>
-                  <Text className="mt-2 font-bold text-red-700">Retry</Text>
+                  <Text className="mt-2 font-bold text-red-700">
+                    Retry
+                  </Text>
                 </Pressable>
               </View>
             ) : payments.length === 0 ? (
@@ -280,56 +412,83 @@ const customer = {
                 <Text className="text-center font-semibold text-slate-700">
                   No payment history
                 </Text>
+
                 <Text className="mt-2 text-center text-sm text-slate-400">
                   Payment records will appear here.
                 </Text>
               </View>
             ) : (
-              payments.map((payment, index) => (
-                <View
-                  key={payment._id || `${payment.month}-${index}`}
-                  className="mb-3 rounded-2xl bg-white p-4"
-                >
-                  <View className="flex-row items-center justify-between">
-                    <View>
-                      <Text className="font-bold text-slate-900">
-                        {payment.month || "Payment"}
-                      </Text>
-                      <Text className="mt-1 text-xs text-slate-500">
-                        {payment.dailyStatus || "Monthly payment"}
-                      </Text>
-                    </View>
+              payments.map((payment, index) => {
+                const paymentStatus = getDisplayText(
+                  payment.status,
+                  "Unknown"
+                );
 
-                    <View
-                      className={`rounded-full px-3 py-1 ${
-                        payment.status?.toLowerCase() === "paid"
-                          ? "bg-green-50"
-                          : "bg-orange-50"
-                      }`}
-                    >
-                      <Text
-                        className={`text-xs font-semibold ${
-                          payment.status?.toLowerCase() === "paid"
-                            ? "text-green-700"
-                            : "text-orange-700"
+                const dailyStatus = getDisplayText(
+                  payment.dailyStatus,
+                  "Monthly payment"
+                );
+
+                const month = getDisplayText(
+                  payment.month,
+                  "Payment"
+                );
+
+                const isPaid =
+                  paymentStatus.toLowerCase() === "paid";
+
+                return (
+                  <View
+                    key={
+                      payment._id ||
+                      `${month}-${index}`
+                    }
+                    className="mb-3 rounded-2xl bg-white p-4"
+                  >
+                    <View className="flex-row items-center justify-between">
+                      <View className="flex-1">
+                        <Text className="font-bold text-slate-900">
+                          {month}
+                        </Text>
+
+                        <Text className="mt-1 text-xs text-slate-500">
+                          {dailyStatus}
+                        </Text>
+                      </View>
+
+                      <View
+                        className={`rounded-full px-3 py-1 ${
+                          isPaid
+                            ? "bg-green-50"
+                            : "bg-orange-50"
                         }`}
                       >
-                        {payment.status || "Unknown"}
-                      </Text>
+                        <Text
+                          className={`text-xs font-semibold ${
+                            isPaid
+                              ? "text-green-700"
+                              : "text-orange-700"
+                          }`}
+                        >
+                          {paymentStatus}
+                        </Text>
+                      </View>
                     </View>
-                  </View>
 
-                  <Text className="mt-3 text-lg font-bold text-slate-900">
-                    {formatAmount(Number(payment.amount || 0))}
-                  </Text>
-
-                  {payment.missedDays ? (
-                    <Text className="mt-1 text-xs text-slate-500">
-                      Missed days: {payment.missedDays}
+                    <Text className="mt-3 text-lg font-bold text-slate-900">
+                      {formatAmount(
+                        Number(payment.amount) || 0
+                      )}
                     </Text>
-                  ) : null}
-                </View>
-              ))
+
+                    {payment.missedDays ? (
+                      <Text className="mt-1 text-xs text-slate-500">
+                        Missed days: {payment.missedDays}
+                      </Text>
+                    ) : null}
+                  </View>
+                );
+              })
             )}
           </View>
         </ScrollView>

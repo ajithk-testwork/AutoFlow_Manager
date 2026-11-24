@@ -339,9 +339,7 @@ export default function DashboardScreen() {
             amount: Number(customer.monthlyAmount) || 0,
           };
         })
-        .filter((customer) =>
-          isMonthStarted ? customer.paymentId !== null : true,
-        );
+      
 
       setDashboardData(mergedData);
     } catch (err: any) {

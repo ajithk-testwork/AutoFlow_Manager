@@ -75,6 +75,7 @@ customerSchema.index({
 
 customerSchema.index({
   serviceId: 1,
+  
 });
 
 // Welcome message lookup
