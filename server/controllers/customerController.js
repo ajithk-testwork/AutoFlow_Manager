@@ -444,13 +444,15 @@ export const getPaymentsByMonth = async (req, res) => {
       });
     }
 
-    // 4. Get all existing customers.
-    // Includes inactive customers to preserve their payment history.
-    // Excludes physically deleted customers.
+
+    // Get only ACTIVE customers for the Payments screen.
+    // Inactive customers should not appear in current payment lists.
     const existingCustomerIds = await Customer.distinct("_id", {
       tenantId,
       serviceId,
+      isActive: true,
     });
+
 
     // 5. Fetch valid payments only
     const payments = await Payment.find({

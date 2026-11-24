@@ -63,12 +63,9 @@ type PaymentCustomer = Customer & {
   readOnly: boolean;
 };
 
-
 type FilterKey = "ALL" | "PENDING" | "PAID";
 
 /* ───────────────────────────── Constants ───────────────────────────── */
-
-
 
 /* ───────────────────────────── Helpers ───────────────────────────── */
 
@@ -165,7 +162,8 @@ export default function PaymentsScreen() {
 
         return (
           (payment.status === "Paid" || payment.status === "Pending") &&
-          Boolean(linkedCustomer?._id)
+          Boolean(linkedCustomer?._id) &&
+          linkedCustomer.isActive !== false
         );
       });
 
@@ -518,8 +516,7 @@ export default function PaymentsScreen() {
   const stats = useMemo(() => {
     // Only valid, non-cancelled payment statuses contribute to totals.
     const validPayments = customers.filter(
-      (customer) =>
-        customer.status === "Paid" || customer.status === "Pending",
+      (customer) => customer.status === "Paid" || customer.status === "Pending",
     );
 
     const expected = validPayments.reduce(
@@ -529,9 +526,7 @@ export default function PaymentsScreen() {
 
     const collected = validPayments.reduce(
       (sum, customer) =>
-        customer.status === "Paid"
-          ? sum + (Number(customer.amount) || 0)
-          : sum,
+        customer.status === "Paid" ? sum + (Number(customer.amount) || 0) : sum,
       0,
     );
 
