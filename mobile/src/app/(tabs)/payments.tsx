@@ -38,10 +38,16 @@ type DailyStatus = {
 
 type Payment = {
   _id: string;
-  customerId: Customer | string;
+  customerId: Customer | string | null;
   month: string;
+  baseAmount?: number;
   amount: number;
-  status: "Paid" | "Pending";
+  status: "Paid" | "Pending" | "Cancelled";
+  customerName?: string;
+  customerPhone?: string;
+  customerDoorNumber?: string;
+  customerVehicleName?: string;
+  customerGender?: string;
   paidDate?: string;
   dailyStatus?: DailyStatus[];
   missedDays?: number;
@@ -57,60 +63,12 @@ type PaymentCustomer = Customer & {
   readOnly: boolean;
 };
 
-type WhatsAppTemplates = {
-  requestTemplate: string;
-  reminderTemplate: string;
-  thankyouTemplate: string;
-  upiId: string;
-  phone: string;
-};
 
 type FilterKey = "ALL" | "PENDING" | "PAID";
 
 /* ───────────────────────────── Constants ───────────────────────────── */
 
-const DEFAULT_TEMPLATES: WhatsAppTemplates = {
-  requestTemplate: `Hello {{name}},
 
-📅 Billing Month: {{month}}
-
-🚗 Service Report:
-Missed Days: {{missedDays}}
-Dates Missed: {{missedDates}}
-
-✅ Final Amount Due: ₹{{amount}}
-
-💳 Payment Options:
-
-🔹 UPI ID:
-{{upi}}
-
-🔹 GPay / PhonePe:
-{{phone}}
-
-Thank you! 🚗✨`,
-
-  reminderTemplate: `Hello {{name}},
-
-Your payment for {{month}} is still pending.
-
-Final Amount Due: ₹{{amount}}
-
-Payment Options:
-UPI ID: {{upi}}
-GPay / PhonePe: {{phone}}
-
-Thank you! 🚗`,
-
-  thankyouTemplate: `Hello {{name}},
-
-We have received your payment of ₹{{amount}} for {{month}}.
-
-Thank you for choosing our service! 🚗✨`,
-
-  upiId: "",
-  phone: "",
-};
 
 /* ───────────────────────────── Helpers ───────────────────────────── */
 
@@ -140,11 +98,6 @@ export default function PaymentsScreen() {
   const [customers, setCustomers] = useState<PaymentCustomer[]>([]);
   const [selectedMonth, setSelectedMonth] = useState("");
   const [isReadOnly, setIsReadOnly] = useState(false);
-  const [serviceId, setServiceId] = useState("");
-
-  const [templates, setTemplates] =
-    useState<WhatsAppTemplates>(DEFAULT_TEMPLATES);
-
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterKey>("ALL");
 
@@ -184,23 +137,44 @@ export default function PaymentsScreen() {
       const month = savedMonth || currentMonth;
       const readOnly = month !== currentMonth;
 
-      setServiceId(savedServiceId);
       setSelectedMonth(month);
       setIsReadOnly(readOnly);
 
-      // Payment documents are the source of truth for historical billing.
+      // Fetch payments for selected month
       const paymentResponse = await api.get("/payments", {
         params: { month, serviceId: savedServiceId },
       });
-      const allPayments: Payment[] = Array.isArray(paymentResponse.data)
-        ? paymentResponse.data
-        : [];
 
-      const mapped: PaymentCustomer[] = allPayments.map((payment: any) => {
+      // Support both old array response and new API response:
+      // { success: true, count: 29, payments: [...] }
+      const responseData = paymentResponse.data;
+
+      const allPayments: Payment[] = Array.isArray(responseData)
+        ? responseData
+        : Array.isArray(responseData?.payments)
+          ? responseData.payments
+          : [];
+
+      // Exclude cancelled payments and payments without
+      // an existing populated customer document.
+      const validPayments = allPayments.filter((payment) => {
+        const linkedCustomer =
+          payment.customerId && typeof payment.customerId === "object"
+            ? payment.customerId
+            : null;
+
+        return (
+          (payment.status === "Paid" || payment.status === "Pending") &&
+          Boolean(linkedCustomer?._id)
+        );
+      });
+
+      const mapped: PaymentCustomer[] = validPayments.map((payment) => {
         const linked =
           payment.customerId && typeof payment.customerId === "object"
             ? payment.customerId
-            : {};
+            : ({} as Partial<Customer>);
+
         const customerId =
           typeof payment.customerId === "object"
             ? payment.customerId?._id
@@ -208,70 +182,34 @@ export default function PaymentsScreen() {
 
         return {
           _id: String(customerId || payment._id),
+
           name: payment.customerName || linked.name || "Customer",
           phone: payment.customerPhone || linked.phone || "",
+
           vehicleName: payment.customerVehicleName || linked.vehicleName || "",
+
           doorNumber: payment.customerDoorNumber || linked.doorNumber || "",
+
           monthlyAmount: Number(payment.baseAmount ?? payment.amount ?? 0),
+
           gender: payment.customerGender || linked.gender || "",
           isActive: linked.isActive ?? true,
+
           serviceId: savedServiceId,
           paymentId: payment._id,
+
           amount: Number(payment.amount || 0),
           status: payment.status || "Pending",
+
           paidDate: payment.paidDate || null,
           dailyStatus: payment.dailyStatus || [],
           missedDays: Number(payment.missedDays || 0),
+
           readOnly,
         };
       });
+
       setCustomers(mapped);
-
-      try {
-        const templateResponse = await api.get(
-          `/whatsapp-template/${savedServiceId}`,
-        );
-
-        console.log("PAYMENT TEMPLATE API RESPONSE:", templateResponse.data);
-
-        // Backend response is { success: true, data: {...} }
-        const saved =
-          templateResponse.data?.data ?? templateResponse.data ?? {};
-
-        console.log("SAVED PAYMENT TEMPLATES:", saved);
-
-        const loadedTemplates: WhatsAppTemplates = {
-          requestTemplate:
-            saved.requestTemplate?.trim() || DEFAULT_TEMPLATES.requestTemplate,
-
-          reminderTemplate:
-            saved.reminderTemplate?.trim() ||
-            DEFAULT_TEMPLATES.reminderTemplate,
-
-          thankyouTemplate:
-            saved.thankyouTemplate?.trim() ||
-            DEFAULT_TEMPLATES.thankyouTemplate,
-
-          upiId: saved.upiId || "",
-
-          phone: saved.phone || "",
-        };
-
-        setTemplates(loadedTemplates);
-
-        console.log("FINAL REQUEST TEMPLATE:", loadedTemplates.requestTemplate);
-        console.log(
-          "FINAL REMINDER TEMPLATE:",
-          loadedTemplates.reminderTemplate,
-        );
-        console.log(
-          "FINAL THANKYOU TEMPLATE:",
-          loadedTemplates.thankyouTemplate,
-        );
-      } catch (templateError) {
-        console.log("Template loading failed:", templateError);
-        setTemplates(DEFAULT_TEMPLATES);
-      }
 
       const getSafeTrackerKey = (month: string) => {
         const safeMonth = month.trim().replace(/[^a-zA-Z0-9._-]/g, "_");
@@ -283,8 +221,22 @@ export default function PaymentsScreen() {
 
       const tracker = await SecureStore.getItemAsync(trackerKey);
 
-      setWaTracker(tracker ? JSON.parse(tracker) : {});
-      setWaTracker(tracker ? JSON.parse(tracker) : {});
+      let parsedTracker: Record<string, boolean> = {};
+
+      if (tracker) {
+        try {
+          const parsed: unknown = JSON.parse(tracker);
+
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+            parsedTracker = parsed as Record<string, boolean>;
+          }
+        } catch {
+          // Ignore corrupted local tracker data and start with an empty tracker.
+          parsedTracker = {};
+        }
+      }
+
+      setWaTracker(parsedTracker);
     } catch (err: any) {
       console.log("Payment loading error:", err.response?.data || err.message);
       setError(
@@ -317,13 +269,16 @@ export default function PaymentsScreen() {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await loadPayments();
-    setRefreshing(false);
+    try {
+      await loadPayments();
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   /* ── Payment + daily status actions ── */
   const runToggle = async (customer: PaymentCustomer) => {
-    if (!customer.paymentId) return;
+    if (!customer.paymentId || customer.status === "Cancelled") return;
 
     const wasPending = isUnpaid(customer.status);
 
@@ -384,6 +339,11 @@ export default function PaymentsScreen() {
     customer: PaymentCustomer,
     status: "Cleaned" | "Missed" | "None",
   ) => {
+    if (customer.status === "Cancelled") {
+      Alert.alert("Cancelled payment", "This payment cannot be changed.");
+      return;
+    }
+
     if (customer.readOnly) {
       Alert.alert("Past month", "Previous month records are read-only.");
       return;
@@ -556,23 +516,47 @@ export default function PaymentsScreen() {
 
   /* ── Derived data ── */
   const stats = useMemo(() => {
-    const expected = customers.reduce((s, c) => s + c.amount, 0);
-    const collected = customers.reduce(
-      (s, c) => (c.status === "Paid" ? s + c.amount : s),
+    // Only valid, non-cancelled payment statuses contribute to totals.
+    const validPayments = customers.filter(
+      (customer) =>
+        customer.status === "Paid" || customer.status === "Pending",
+    );
+
+    const expected = validPayments.reduce(
+      (sum, customer) => sum + (Number(customer.amount) || 0),
       0,
     );
-    const pending = customers.reduce(
-      (s, c) => (isUnpaid(c.status) ? s + c.amount : s),
+
+    const collected = validPayments.reduce(
+      (sum, customer) =>
+        customer.status === "Paid"
+          ? sum + (Number(customer.amount) || 0)
+          : sum,
       0,
     );
-    const paidCount = customers.filter((c) => c.status === "Paid").length;
+
+    const pending = validPayments.reduce(
+      (sum, customer) =>
+        customer.status === "Pending"
+          ? sum + (Number(customer.amount) || 0)
+          : sum,
+      0,
+    );
+
+    const paidCount = validPayments.filter(
+      (customer) => customer.status === "Paid",
+    ).length;
+
+    const pendingCount = validPayments.filter(
+      (customer) => customer.status === "Pending",
+    ).length;
 
     return {
       expected,
       collected,
       pending,
       paidCount,
-      pendingCount: customers.length - paidCount,
+      pendingCount,
       rate:
         expected > 0
           ? Math.min(100, Math.round((collected / expected) * 100))

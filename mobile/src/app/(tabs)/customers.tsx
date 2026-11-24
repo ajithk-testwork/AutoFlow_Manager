@@ -110,6 +110,8 @@ export default function CustomersScreen() {
   const [selectedMonth, setSelectedMonth] = useState("");
   const [isHistorical, setIsHistorical] = useState(false);
 
+  const [monthPayments, setMonthPayments] = useState<any[]>([]);
+
   const [status, setStatus] = useState<CustomerStatus>("all");
   const [search, setSearch] = useState("");
 
@@ -145,33 +147,51 @@ export default function CustomersScreen() {
     };
   }, []);
 
-  /* ── Load customers for the month chosen on the dashboard ── */
   const loadCustomers = useCallback(async () => {
     try {
       setError("");
+
       const [savedServiceId, savedMonth] = await Promise.all([
         SecureStore.getItemAsync("autoflow_service_id"),
         SecureStore.getItemAsync("autoflow_selected_month"),
       ]);
 
-      if (!savedServiceId) throw new Error("Please select a service first.");
+      if (!savedServiceId) {
+        throw new Error("Please select a service first.");
+      }
 
       const month = savedMonth || getCurrentMonth();
       const historical = month !== getCurrentMonth();
+
       setServiceId(savedServiceId);
       setSelectedMonth(month);
       setIsHistorical(historical);
 
+      // Fetch selected month's payment records
+      const paymentResponse = await api.get("/payments", {
+        params: {
+          serviceId: savedServiceId,
+          month,
+        },
+      });
+
+      const paymentData = paymentResponse.data;
+      const records = Array.isArray(paymentData)
+        ? paymentData
+        : Array.isArray(paymentData?.payments)
+          ? paymentData.payments
+          : [];
+
+      setMonthPayments(records);
+
       if (historical) {
-        const response = await api.get("/payments", {
-          params: { serviceId: savedServiceId, month },
-        });
-        const records = Array.isArray(response.data) ? response.data : [];
+        // Historical month: show payment snapshots
         const mapped = records.map((payment: any) => {
           const linked =
             payment.customerId && typeof payment.customerId === "object"
               ? payment.customerId
               : {};
+
           const customerId =
             typeof payment.customerId === "object"
               ? payment.customerId?._id
@@ -185,23 +205,53 @@ export default function CustomersScreen() {
             vehicleName:
               payment.customerVehicleName || linked.vehicleName || "",
             monthlyAmount: Number(payment.baseAmount ?? payment.amount ?? 0),
+            amount: Number(payment.amount) || 0,
             gender: payment.customerGender || linked.gender || "",
             isActive: linked.isActive ?? true,
             serviceId: savedServiceId,
             paymentId: payment._id,
-            amount: Number(payment.amount || 0),
             status: payment.status || "Pending",
-            missedDays: Number(payment.missedDays || 0),
+            missedDays: Number(payment.missedDays) || 0,
           };
         });
+
         setCustomers(mapped as Customer[]);
       } else {
-        // Fetch everything once; filtering and counts are done on the device.
-        const data = await fetchCustomers(savedServiceId, "all");
-        setCustomers(data);
+        // Current month: merge customers with payment records
+        const customerData = await fetchCustomers(savedServiceId, "all");
+
+        const paymentMap = new Map<string, any>();
+
+        records.forEach((payment: any) => {
+          const customerId =
+            typeof payment.customerId === "object"
+              ? payment.customerId?._id
+              : payment.customerId;
+
+          if (customerId) {
+            paymentMap.set(String(customerId), payment);
+          }
+        });
+
+        const merged = customerData.map((customer) => {
+          const payment = paymentMap.get(String(customer._id));
+
+          return {
+            ...customer,
+            paymentId: payment?._id || null,
+            amount: payment
+              ? Number(payment.amount) || 0
+              : Number(customer.monthlyAmount) || 0,
+            status: payment?.status || "No Record",
+            missedDays: Number(payment?.missedDays) || 0,
+          };
+        });
+
+        setCustomers(merged as Customer[]);
       }
     } catch (err: any) {
       console.log("CUSTOMERS ERROR:", err.response?.data || err.message);
+
       setError(
         err.response?.data?.message ||
           err.message ||
@@ -236,6 +286,7 @@ export default function CustomersScreen() {
         const value = isHistorical
           ? ((c as any).amount ?? c.monthlyAmount)
           : c.monthlyAmount;
+
         return sum + (Number(value) || 0);
       }, 0),
     [customers, isHistorical],
@@ -262,7 +313,10 @@ export default function CustomersScreen() {
 
   /* ── Form ── */
   const updateField = (key: FormKey, value: string) => {
-    setForm((previous) => ({ ...previous, [key]: value }));
+    const nextValue =
+      key === "phone" ? value.replace(/\D/g, "").slice(0, 10) : value;
+
+    setForm((previous) => ({ ...previous, [key]: nextValue }));
     if (formErrors[key]) {
       setFormErrors((previous) => ({ ...previous, [key]: undefined }));
     }
@@ -281,7 +335,7 @@ export default function CustomersScreen() {
     setEditingCustomer(customer);
     setForm({
       name: customer.name || "",
-      phone: customer.phone || "",
+      phone: String(customer.phone || "").replace(/\D/g, "").slice(-10),
       doorNumber: customer.doorNumber || "",
       vehicleName: customer.vehicleName || "",
       monthlyAmount: String(customer.monthlyAmount ?? ""),
@@ -307,7 +361,7 @@ export default function CustomersScreen() {
 
   const validateForm = () => {
     const errors: Partial<Record<FormKey, string>> = {};
-    const phone = form.phone.trim();
+    const phone = form.phone.replace(/\D/g, "");
     const amount = Number(form.monthlyAmount);
 
     if (!form.name.trim()) errors.name = "Enter the customer’s name.";
@@ -335,7 +389,7 @@ export default function CustomersScreen() {
     }
 
     const name = form.name.trim();
-    const phone = form.phone.trim();
+    const phone = form.phone.replace(/\D/g, "");
     const amount = Number(form.monthlyAmount);
 
     try {

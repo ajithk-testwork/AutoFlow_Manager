@@ -10,18 +10,23 @@ export const getMonthKey = () => {
   })} ${date.getFullYear()}`;
 };
 
+
 export const getDashboardSummary = async (req, res) => {
   try {
     const { serviceId, month } = req.query;
     const tenantId = req.user.tenantId;
 
-    if (!serviceId || !month) {
+    // 1. Validate required fields
+    if (!serviceId || !month || !month.trim()) {
       return res.status(400).json({
+        success: false,
         message: "Service ID and month are required",
       });
     }
 
-    // Verify this service belongs to the logged-in tenant
+    const selectedMonth = month.trim();
+
+    // 2. Verify service belongs to logged-in tenant
     const service = await Service.findOne({
       _id: serviceId,
       tenantId,
@@ -30,16 +35,34 @@ export const getDashboardSummary = async (req, res) => {
 
     if (!service) {
       return res.status(404).json({
+        success: false,
         message: "Service not found",
       });
     }
 
+    // 3. Find all existing customers for this tenant and service.
+    // This includes inactive customers to preserve their payment history.
+    // Deleted customers will not be included.
+    const existingCustomerIds = await Customer.distinct("_id", {
+      tenantId,
+      serviceId,
+    });
+
+    // 4. Build payment filter
+    // Exclude:
+    // - Cancelled payments
+    // - Payments belonging to deleted customers
     const paymentFilter = {
       tenantId,
       serviceId,
-      month: month.trim(),
+      month: selectedMonth,
+      status: { $in: ["Paid", "Pending"] },
+      customerId: {
+        $in: existingCustomerIds,
+      },
     };
 
+    // 5. Fetch dashboard data
     const [
       totalCustomers,
       activeCustomers,
@@ -47,22 +70,32 @@ export const getDashboardSummary = async (req, res) => {
       payments,
       recentCustomers,
     ] = await Promise.all([
-      Customer.countDocuments({ tenantId, serviceId }),
+      // Total customers
+      Customer.countDocuments({
+        tenantId,
+        serviceId,
+      }),
 
+      // Active customers
       Customer.countDocuments({
         tenantId,
         serviceId,
         isActive: true,
       }),
 
+      // Inactive customers
       Customer.countDocuments({
         tenantId,
         serviceId,
         isActive: false,
       }),
 
-      Payment.find(paymentFilter).select("amount status"),
+      // Valid payments only
+      Payment.find(paymentFilter)
+        .select("amount status customerId")
+        .lean(),
 
+      // Recently added active customers
       Customer.find({
         tenantId,
         serviceId,
@@ -70,50 +103,70 @@ export const getDashboardSummary = async (req, res) => {
       })
         .sort({ createdAt: -1 })
         .limit(5)
-        .select("name phone vehicleName monthlyAmount isActive"),
+        .select("name phone vehicleName monthlyAmount isActive")
+        .lean(),
     ]);
 
-    const expected = payments.reduce(
-      (sum, payment) => sum + (Number(payment.amount) || 0),
-      0,
-    );
+    // 6. Calculate payment amounts
+    const expected = payments.reduce((sum, payment) => {
+      return sum + (Number(payment.amount) || 0);
+    }, 0);
 
-    const collected = payments
-      .filter((payment) => payment.status === "Paid")
-      .reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
+    const collected = payments.reduce((sum, payment) => {
+      if (payment.status === "Paid") {
+        return sum + (Number(payment.amount) || 0);
+      }
+      return sum;
+    }, 0);
 
-    const pending = payments
-      .filter((payment) => payment.status === "Pending")
-      .reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
+    const pending = payments.reduce((sum, payment) => {
+      if (payment.status === "Pending") {
+        return sum + (Number(payment.amount) || 0);
+      }
+      return sum;
+    }, 0);
 
+    // 7. Send dashboard response
     return res.status(200).json({
       success: true,
+
       service: {
         id: service._id,
         name: service.serviceName,
       },
-      month: month.trim(),
+
+      month: selectedMonth,
+
       customers: {
         total: totalCustomers,
         active: activeCustomers,
         inactive: inactiveCustomers,
       },
+
       payments: {
         expected,
         collected,
         pending,
         totalPayments: payments.length,
       },
+
       recentCustomers,
     });
   } catch (error) {
     console.error("Dashboard Summary Error:", error);
 
     return res.status(500).json({
+      success: false,
       message: "Failed to fetch dashboard summary",
+      error:
+        process.env.NODE_ENV === "development"
+          ? error.message
+          : undefined,
     });
   }
 };
+
+
 
 export const getCustomers = async (req, res) => {
   try {
@@ -274,54 +327,110 @@ export const deleteCustomer = async (req, res) => {
   }
 };
 
+
 export const togglePayment = async (req, res) => {
   try {
+    // 1. Find payment belonging to the logged-in tenant
     const payment = await Payment.findOne({
       _id: req.params.id,
-
       tenantId: req.user.tenantId,
     });
 
+    // 2. Check payment exists
     if (!payment) {
       return res.status(404).json({
+        success: false,
         message: "Payment not found",
       });
     }
 
-    if (payment.status === "Pending") {
-      payment.status = "Paid";
-
-      payment.paidDate = new Date().toLocaleDateString("en-CA");
-    } else {
-      payment.status = "Pending";
-
-      payment.paidDate = null;
+    // 3. Prevent cancelled payment from being modified
+    if (payment.status === "Cancelled") {
+      return res.status(400).json({
+        success: false,
+        message: "Cancelled payment cannot be changed",
+      });
     }
 
+    // 4. Toggle Pending <-> Paid
+    if (payment.status === "Pending") {
+      payment.status = "Paid";
+      payment.paidDate = new Date().toLocaleDateString("en-CA");
+    } else if (payment.status === "Paid") {
+      payment.status = "Pending";
+      payment.paidDate = null;
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid payment status",
+      });
+    }
+
+    // 5. Save updated payment
     await payment.save();
 
-    res.json(payment);
-  } catch {
-    res.status(500).json({
-      message: "Toggle failed",
+    // 6. Return updated payment
+    return res.status(200).json({
+      success: true,
+      message: `Payment marked as ${payment.status}`,
+      payment,
+    });
+  } catch (error) {
+    console.error("Toggle Payment Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update payment",
     });
   }
 };
+
+
 
 export const getPaymentsByMonth = async (req, res) => {
   try {
     const { month, serviceId } = req.query;
     const tenantId = req.user.tenantId;
 
-    // Validate required fields
-    if (!month || !serviceId) {
+    // 1. Validate required fields
+    if (!month || !month.trim() || !serviceId) {
       return res.status(400).json({
         success: false,
         message: "Month and Service ID are required",
       });
     }
 
-    // Verify service belongs to logged-in tenant
+    const selectedMonth = month.trim();
+
+    // 2. Validate month format (Example: November 2026)
+    const monthParts = selectedMonth.split(" ");
+
+    if (monthParts.length !== 2) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid month format",
+      });
+    }
+
+    const [monthName, yearStr] = monthParts;
+    const year = Number(yearStr);
+
+    const monthIndex = new Date(
+      Date.parse(`${monthName} 1, ${year}`)
+    ).getMonth();
+
+    if (
+      !Number.isInteger(year) ||
+      year < 2000 ||
+      Number.isNaN(monthIndex)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid month",
+      });
+    }
+
+    // 3. Verify service belongs to logged-in tenant
     const service = await Service.findOne({
       _id: serviceId,
       tenantId,
@@ -335,18 +444,40 @@ export const getPaymentsByMonth = async (req, res) => {
       });
     }
 
+    // 4. Get all existing customers.
+    // Includes inactive customers to preserve their payment history.
+    // Excludes physically deleted customers.
+    const existingCustomerIds = await Customer.distinct("_id", {
+      tenantId,
+      serviceId,
+    });
+
+    // 5. Fetch valid payments only
     const payments = await Payment.find({
       tenantId,
       serviceId,
-      month: month.trim(),
+      month: selectedMonth,
+      status: {
+        $in: ["Paid", "Pending"],
+      },
+      customerId: {
+        $in: existingCustomerIds,
+      },
     })
       .populate(
         "customerId",
-        "name phone doorNumber vehicleName monthlyAmount gender isActive",
+        "name phone doorNumber vehicleName monthlyAmount gender isActive"
       )
-      .sort({ createdAt: 1 });
+      .sort({ createdAt: 1 })
+      .lean();
 
-    return res.status(200).json(payments);
+    // 6. Return payments
+    return res.status(200).json({
+      success: true,
+      count: payments.length,
+      payments,
+    });
+
   } catch (error) {
     console.error("Get Payments Error:", error);
 
@@ -356,6 +487,7 @@ export const getPaymentsByMonth = async (req, res) => {
     });
   }
 };
+
 
 export const getSinglePayment = async (req, res) => {
   try {
@@ -460,66 +592,139 @@ export const startNewMonth = async (req, res) => {
   }
 };
 
+
 export const updateDailyStatus = async (req, res) => {
   try {
-    let { paymentId, date, status, month } = req.body;
+    const { paymentId, date, status, month } = req.body;
+    const tenantId = req.user.tenantId;
 
+    // 1. Validate required fields
+    if (!paymentId || !date || !status) {
+      return res.status(400).json({
+        success: false,
+        message: "Payment ID, date and status are required",
+      });
+    }
+
+    // 2. Validate daily status
+    const allowedStatuses = ["Cleaned", "Missed", "None"];
+
+    if (!allowedStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid daily status",
+      });
+    }
+
+    // 3. Validate date
+    const selectedDate = new Date(date);
+
+    if (Number.isNaN(selectedDate.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid date",
+      });
+    }
+
+    const formattedDate = selectedDate.toISOString().split("T")[0];
+
+    // 4. Find payment and populate customer
     const payment = await Payment.findOne({
       _id: paymentId,
-
-      tenantId: req.user.tenantId,
+      tenantId,
     }).populate("customerId");
 
     if (!payment) {
       return res.status(404).json({
+        success: false,
         message: "Payment not found",
       });
     }
 
-    const formattedDate = new Date(date).toISOString().split("T")[0];
+    // 5. Prevent cancelled payment updates
+    if (payment.status === "Cancelled") {
+      return res.status(400).json({
+        success: false,
+        message: "Cancelled payment daily status cannot be changed",
+      });
+    }
 
-    const existing = payment.dailyStatus.find((d) => d.date === formattedDate);
+    // 6. Update daily status
+    const existing = payment.dailyStatus.find(
+      (item) => item.date === formattedDate
+    );
 
     if (status === "None") {
       payment.dailyStatus = payment.dailyStatus.filter(
-        (d) => d.date !== formattedDate,
+        (item) => item.date !== formattedDate
       );
+    } else if (existing) {
+      existing.status = status;
     } else {
-      if (existing) {
-        existing.status = status;
-      } else {
-        payment.dailyStatus.push({
-          date: formattedDate,
-          status,
-        });
-      }
+      payment.dailyStatus.push({
+        date: formattedDate,
+        status,
+      });
     }
 
+    // 7. Recalculate missed days
     const missedDays = payment.dailyStatus.filter(
-      (d) => d.status === "Missed",
+      (item) => item.status === "Missed"
     ).length;
 
     payment.missedDays = missedDays;
 
-    let targetMonth = month || payment.month;
+    // 8. Get target month
+    const targetMonth = (month || payment.month).trim();
 
-    const [monthName, yearStr] = targetMonth.trim().split(" ");
+    const monthParts = targetMonth.split(" ");
 
-    const year = parseInt(yearStr);
+    if (monthParts.length !== 2) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid payment month format",
+      });
+    }
+
+    const [monthName, yearStr] = monthParts;
+    const year = Number(yearStr);
 
     const monthIndex = new Date(
-      Date.parse(`${monthName} 1, ${year}`),
+      Date.parse(`${monthName} 1, ${year}`)
     ).getMonth();
 
-    const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+    if (
+      !Number.isInteger(year) ||
+      !Number.isInteger(monthIndex) ||
+      Number.isNaN(monthIndex)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid payment month",
+      });
+    }
 
+    const daysInMonth = new Date(
+      year,
+      monthIndex + 1,
+      0
+    ).getDate();
+
+    // 9. Get monthly amount
     const monthlyAmount =
       Number(payment.baseAmount) ||
       Number(payment.customerId?.monthlyAmount) ||
       0;
 
-    // Backfill snapshot for older payment records when possible
-    if (!payment.baseAmount) {
+    if (monthlyAmount < 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid monthly amount",
+      });
+    }
+
+    // 10. Backfill old payment snapshots when possible
+    if (!payment.baseAmount && monthlyAmount > 0) {
       payment.baseAmount = monthlyAmount;
     }
 
@@ -532,33 +737,44 @@ export const updateDailyStatus = async (req, res) => {
     }
 
     if (!payment.customerDoorNumber && payment.customerId) {
-      payment.customerDoorNumber = payment.customerId.doorNumber || "";
+      payment.customerDoorNumber =
+        payment.customerId.doorNumber || "";
     }
 
     if (!payment.customerVehicleName && payment.customerId) {
-      payment.customerVehicleName = payment.customerId.vehicleName || "";
+      payment.customerVehicleName =
+        payment.customerId.vehicleName || "";
     }
 
+    // 11. Calculate final amount
     const perDay = monthlyAmount / daysInMonth;
 
-    let finalAmount = Math.round(monthlyAmount - missedDays * perDay);
+    let finalAmount = Math.round(
+      monthlyAmount - missedDays * perDay
+    );
 
     finalAmount = Math.max(0, finalAmount);
 
     payment.amount = finalAmount;
 
+    // 12. Save payment
     await payment.save();
 
-    res.json(payment);
+    return res.status(200).json({
+      success: true,
+      message: "Daily status updated successfully",
+      payment,
+    });
+
   } catch (error) {
     console.error("Error updating daily status:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
+      success: false,
       message: "Error updating daily status",
     });
   }
 };
-
 
 
 export const updateCustomer = async (req, res) => {
@@ -581,12 +797,10 @@ export const updateCustomer = async (req, res) => {
     const tenantId = req.user.tenantId;
 
     // 1. Validate month
-    const validMonth = typeof month === "string"
-      ? month.trim()
-      : "";
+    const validMonth = typeof month === "string" ? month.trim() : "";
 
     const monthMatch = validMonth.match(
-      /^(January|February|March|April|May|June|July|August|September|October|November|December)\s(\d{4})$/
+      /^(January|February|March|April|May|June|July|August|September|October|November|December)\s(\d{4})$/,
     );
 
     if (!monthMatch) {
@@ -600,7 +814,7 @@ export const updateCustomer = async (req, res) => {
     const year = Number(monthMatch[2]);
 
     const monthIndex = new Date(
-      Date.parse(`${monthName} 1, ${year}`)
+      Date.parse(`${monthName} 1, ${year}`),
     ).getMonth();
 
     if (Number.isNaN(monthIndex)) {
@@ -662,24 +876,17 @@ export const updateCustomer = async (req, res) => {
       payment.baseAmount = amount;
 
       // Preserve missed-day adjustment
-      const daysInMonth = new Date(
-        year,
-        monthIndex + 1,
-        0
-      ).getDate();
+      const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
 
       const missedDays = Number(payment.missedDays) || 0;
 
-      const safeMissedDays = Math.min(
-        missedDays,
-        daysInMonth
-      );
+      const safeMissedDays = Math.min(missedDays, daysInMonth);
 
       const perDay = amount / daysInMonth;
 
       payment.amount = Math.max(
         0,
-        Math.round(amount - safeMissedDays * perDay)
+        Math.round(amount - safeMissedDays * perDay),
       );
 
       await payment.save();
@@ -692,7 +899,6 @@ export const updateCustomer = async (req, res) => {
       paymentUpdated: Boolean(payment),
       payment,
     });
-
   } catch (error) {
     console.error("Update Customer Error:", error);
 
@@ -704,18 +910,20 @@ export const updateCustomer = async (req, res) => {
 };
 
 
-
 export const getGlobalHistory = async (req, res) => {
   try {
     const { serviceId } = req.query;
     const tenantId = req.user.tenantId;
 
+    // 1. Validate service ID
     if (!serviceId) {
       return res.status(400).json({
+        success: false,
         message: "Service ID is required",
       });
     }
 
+    // 2. Verify service belongs to logged-in tenant
     const service = await Service.findOne({
       _id: serviceId,
       tenantId,
@@ -724,12 +932,14 @@ export const getGlobalHistory = async (req, res) => {
 
     if (!service) {
       return res.status(404).json({
+        success: false,
         message: "Service not found",
       });
     }
 
-    // Payment collection is the source of truth.
-    // Do not filter by currently existing customers.
+    // 3. Fetch all payment history.
+    // Do not filter by existing customers.
+    // Deleted and inactive customer payment history must be preserved.
     const payments = await Payment.find({
       tenantId,
       serviceId,
@@ -738,8 +948,10 @@ export const getGlobalHistory = async (req, res) => {
         "customerId",
         "name phone doorNumber vehicleName gender isActive",
       )
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
+    // 4. Group payments month-wise
     const groupedHistory = {};
 
     payments.forEach((payment) => {
@@ -750,30 +962,49 @@ export const getGlobalHistory = async (req, res) => {
           month,
           collected: 0,
           pending: 0,
+          cancelled: 0,
+          totalPayments: 0,
           payments: [],
         };
       }
 
+      // Keep every payment in history,
+      // including payments whose customer document was deleted.
       groupedHistory[month].payments.push(payment);
 
       const amount = Number(payment.amount) || 0;
 
+      // Count only valid payment statuses
       if (payment.status === "Paid") {
         groupedHistory[month].collected += amount;
-      } else {
+      } else if (payment.status === "Pending") {
         groupedHistory[month].pending += amount;
+      } else if (payment.status === "Cancelled") {
+        groupedHistory[month].cancelled += amount;
       }
+
+      groupedHistory[month].totalPayments += 1;
     });
 
-    return res.status(200).json(Object.values(groupedHistory));
+    // 5. Return month-wise history
+    return res.status(200).json({
+      success: true,
+      history: Object.values(groupedHistory),
+    });
   } catch (error) {
     console.error("Global History Error:", error);
 
     return res.status(500).json({
+      success: false,
       message: "Failed to fetch global history",
+      error:
+        process.env.NODE_ENV === "development"
+          ? error.message
+          : undefined,
     });
   }
 };
+
 
 export const markWelcomeSent = async (req, res) => {
   try {
