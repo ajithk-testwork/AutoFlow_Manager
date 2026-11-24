@@ -573,6 +573,11 @@ export const updateCustomer = async (req, res) => {
       month,
     } = req.body;
 
+    console.log("========== UPDATE CUSTOMER API ==========");
+    console.log("CUSTOMER ID:", req.params.id);
+    console.log("BODY:", req.body);
+    console.log("TENANT ID:", req.user?.tenantId);
+
     const tenantId = req.user.tenantId;
 
     // 1. Validate month
@@ -693,7 +698,7 @@ export const updateCustomer = async (req, res) => {
 
     return res.status(500).json({
       success: false,
-      message: "Update failed",
+      message: error.message || "Update failed",
     });
   }
 };

@@ -51,8 +51,30 @@ export async function updateCustomer(
   id: string,
   customer: Partial<Customer> & { month?: string },
 ) {
-  const response = await api.put(`/${id}`, customer);
-  return response.data;
+  try {
+    console.log("========== UPDATE CUSTOMER ==========");
+    console.log("CUSTOMER ID:", id);
+    console.log("UPDATE PAYLOAD:", customer);
+    console.log("API URL:", `${api.defaults.baseURL}/${id}`);
+
+    const response = await api.put(`/${id}`, customer);
+
+    console.log("UPDATE STATUS:", response.status);
+    console.log("UPDATE RESPONSE:", response.data);
+
+    return response.data;
+  } catch (error: any) {
+    console.log("========== UPDATE ERROR ==========");
+    console.log("MESSAGE:", error.message);
+    console.log("ERROR CODE:", error.code);
+    console.log("REQUEST URL:", error.config?.url);
+    console.log("REQUEST METHOD:", error.config?.method);
+    console.log("BASE URL:", error.config?.baseURL);
+    console.log("SERVER STATUS:", error.response?.status);
+    console.log("SERVER RESPONSE:", error.response?.data);
+
+    throw error;
+  }
 }
 
 export async function removeCustomer(id: string) {
